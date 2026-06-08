@@ -1,0 +1,222 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ── Lenis smooth scroll ────────────────────────────────────── */
+html.lenis, html.lenis body {
+  height: auto;
+  position: relative;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: hidden;
+}
+.lenis.lenis-scrolling iframe {
+  pointer-events: none;
+}
+
+@layer base {
+  :root {
+    /* Light mode: clean, airy, professional */
+    --page-bg: 248 250 252;
+    --surface: 255 255 255;
+    --surface-muted: 241 245 249;
+    --border: 226 232 240;
+    --text: 15 23 42;
+    --text-muted: 71 85 105;
+    --accent: 59 130 246;
+    --accent-soft: 219 234 254;
+    --ring: 59 130 246;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    /* Prevent horizontal overflow on all screen sizes */
+    overflow-x: hidden;
+  }
+
+  body {
+    @apply bg-[rgb(var(--page-bg))] text-ink-900 antialiased transition-colors duration-300;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    /* Prevent content from overflowing viewport on mobile */
+    overflow-x: hidden;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  ::selection {
+    @apply bg-brand-500/25 text-brand-950;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand-500/50 ring-offset-2 ring-offset-[rgb(var(--page-bg))];
+  }
+
+  /* Custom scrollbar */
+  ::-webkit-scrollbar {
+    @apply w-2;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-ink-300;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-400;
+  }
+}
+
+@layer components {
+  /* ---- Glass morphism ---- */
+  .glass {
+    @apply border border-ink-200/70 bg-white/90 shadow-lg shadow-ink-900/[0.06] backdrop-blur-xl;
+  }
+
+  .glass-card {
+    @apply rounded-2xl border border-ink-200/60 bg-white/80 p-6 shadow-lg shadow-ink-900/[0.08] backdrop-blur-lg;
+  }
+
+  .glass-panel {
+    @apply border border-ink-200/50 bg-white/60 backdrop-blur-2xl;
+  }
+
+  /* ---- Gradients ---- */
+  .text-gradient {
+    @apply bg-gradient-to-r from-brand-700 via-brand-600 to-cyan-600 bg-clip-text text-transparent;
+  }
+
+  .text-gradient-hero {
+    @apply bg-gradient-to-r from-ink-900 via-brand-700 to-brand-600 bg-clip-text text-transparent;
+  }
+
+  .border-gradient {
+    border-image: linear-gradient(135deg, rgb(59 130 246 / 0.4), rgb(6 182 212 / 0.3), rgb(99 102 241 / 0.2)) 1;
+  }
+
+  /* ---- Grid overlay ---- */
+  .grid-pattern {
+    background-image:
+      linear-gradient(to right, rgb(100 116 139 / 0.08) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(100 116 139 / 0.08) 1px, transparent 1px);
+    background-size: 48px 48px;
+  }
+
+  /* ---- Noise texture ---- */
+  .noise-bg::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0.025;
+    pointer-events: none;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+}
+
+@layer utilities {
+  /* ---- Safe area padding for notched devices ---- */
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .safe-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* ---- Minimum touch target (44px per WCAG) ---- */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* ---- Prevent text overflow on mobile ---- */
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  /* ---- Responsive text clamp ---- */
+  .line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .line-clamp-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* ---- Marquee ---- */
+  .marquee-container {
+    @apply flex overflow-hidden;
+  }
+
+  .marquee-content {
+    @apply flex shrink-0 gap-8;
+    animation: marquee var(--marquee-duration, 30s) linear infinite;
+  }
+
+  .marquee-content:hover {
+    animation-play-state: paused;
+  }
+
+  /* ---- Hide scrollbar ---- */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  /* ---- Thin scrollbar (for horizontal tab navs) ---- */
+  .thin-scrollbar::-webkit-scrollbar {
+    height: 4px;
+  }
+  .thin-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .thin-scrollbar::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-ink-200;
+  }
+  .thin-scrollbar::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-300;
+  }
+  .thin-scrollbar {
+    scrollbar-width: thin;
+  }
+
+  /* ---- Glow effect ---- */
+  .glow-sm {
+    box-shadow: 0 0 15px rgb(59 130 246 / 0.12);
+  }
+  .glow-md {
+    box-shadow: 0 0 30px rgb(59 130 246 / 0.15);
+  }
+  .glow-lg {
+    box-shadow: 0 0 50px rgb(59 130 246 / 0.18), 0 0 100px rgb(6 182 212 / 0.06);
+  }
+
+  /* ---- Hero gradient mesh ---- */
+  .bg-hero-mesh {
+    background: radial-gradient(ellipse 80% 60% at 50% 30%, rgb(59 130 246 / 0.10) 0%, transparent 60%),
+                radial-gradient(ellipse 50% 80% at 80% 50%, rgb(6 182 212 / 0.07) 0%, transparent 50%),
+                radial-gradient(ellipse 60% 50% at 20% 70%, rgb(99 102 241 / 0.06) 0%, transparent 50%);
+  }
+
+  /* ---- Easing ---- */
+  .ease-out-expo {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  /* ---- Shadow glow brand ---- */
+  .shadow-glow-brand {
+    box-shadow: 0 4px 14px rgb(59 130 246 / 0.30), 0 0 30px rgb(59 130 246 / 0.10);
+  }
+}
