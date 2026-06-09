@@ -21,6 +21,7 @@ import { Button } from '@/components/ui/Button.jsx'
 import { Input } from '@/components/ui/Input.jsx'
 import { Badge } from '@/components/ui/Badge.jsx'
 import { Skeleton } from '@/components/ui/Skeleton.jsx'
+import { SnitchLoader } from '@/components/ui/SnitchLoader.jsx'
 import { loadRazorpayScript } from '@/utils/loadRazorpay.js'
 import { isRegistrationComplete } from '@/utils/teamRegistrationDisplay.js'
 import { formatLifecyclePhase } from '@/utils/eventLifecycleDisplay.js'
@@ -66,6 +67,7 @@ export function ParticipantRegistrationPage() {
 
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
+  const [showSnitchLoader, setShowSnitchLoader] = useState(false)
   const [nowMs, setNowMs] = useState(null)
   const [roster, setRoster] = useState(null)
 
@@ -169,28 +171,47 @@ export function ParticipantRegistrationPage() {
   }
 
   async function openRazorpayCheckout() {
-    await loadRazorpayScript()
-    const order = await api.createRazorpayOrder()
-    const keyId = order.keyId || eventCfg?.razorpayKeyId
-    if (!keyId) {
-      throw new Error('Razorpay is not configured on the server. Contact an organizer.')
-    }
-    return new Promise((resolve, reject) => {
-      const options = {
-        key: keyId,
-        name: 'Smart Kopargaon Hackathon',
-        description: 'Registration fee',
-        order_id: order.orderId,
-        handler: (response) => resolve(response),
-        modal: {
-          ondismiss: () => reject(new Error('Payment window closed before completion.')),
-        },
-        theme: { color: '#2563eb' },
+    setShowSnitchLoader(true)
+    try {
+      await loadRazorpayScript()
+      const order = await api.createRazorpayOrder()
+      const keyId = order.keyId || eventCfg?.razorpayKeyId
+      if (!keyId) {
+        throw new Error('Razorpay is not configured on the server. Contact an organizer.')
       }
-      const rzp = new globalThis.Razorpay(options)
-      rzp.on('payment.failed', () => reject(new Error('Payment failed. Try again or contact support.')))
-      rzp.open()
-    })
+      
+      return new Promise((resolve, reject) => {
+        const options = {
+          key: keyId,
+          name: 'Smart Kopargaon Hackathon',
+          description: 'Registration fee',
+          order_id: order.orderId,
+          handler: (response) => {
+            setShowSnitchLoader(false)
+            resolve(response)
+          },
+          modal: {
+            ondismiss: () => {
+              setShowSnitchLoader(false)
+              reject(new Error('Payment window closed before completion.'))
+            },
+          },
+          theme: { color: '#2563eb' },
+        }
+        const rzp = new globalThis.Razorpay(options)
+        rzp.on('payment.failed', () => {
+          setShowSnitchLoader(false)
+          reject(new Error('Payment failed. Try again or contact support.'))
+        })
+        
+        // Hide loader when Razorpay modal opens
+        setTimeout(() => setShowSnitchLoader(false), 1000)
+        rzp.open()
+      })
+    } catch (error) {
+      setShowSnitchLoader(false)
+      throw error
+    }
   }
 
   async function payEntryFee() {
@@ -359,12 +380,13 @@ export function ParticipantRegistrationPage() {
   }
 
   return (
-    <motion.div
-      className="mx-auto max-w-xl space-y-8 lg:max-w-2xl"
-      variants={listVariants}
-      initial="hidden"
-      animate="show"
-    >
+    <>
+      <motion.div
+        className="mx-auto max-w-xl space-y-8 lg:max-w-2xl"
+        variants={listVariants}
+        initial="hidden"
+        animate="show"
+      >
       <motion.div variants={cardVariants} className="relative overflow-hidden rounded-3xl border border-brand-500/20 bg-gradient-to-br from-brand-500/10 via-[rgb(var(--surface))] to-cyan-500/10 p-6 shadow-lg shadow-brand-500/5 md:p-8">
         <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-brand-400/20 blur-3xl" />
         <div className="relative flex items-start gap-4">
@@ -692,5 +714,9 @@ export function ParticipantRegistrationPage() {
         </>
       )}
     </motion.div>
+
+    {/* Snitch loader overlay when opening Razorpay */}
+    {showSnitchLoader && <SnitchLoader message="Opening payment gateway..." />}
+    </>
   )
 }

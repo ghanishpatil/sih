@@ -153,12 +153,12 @@ export function Hero() {
             transition={{ duration: 0.85, delay: 0.2, ease: [0.16, 1, 0.3, 1] }}
             className="hidden shrink-0 md:block"
           >
-            {/* Glow ring behind logo */}
+            {/* Glow ring behind mascot */}
             <div className="relative">
               <div className="absolute inset-0 rounded-full bg-brand-400/15 blur-3xl scale-110" />
               <motion.img
-                src="/logo.png"
-                alt="Smart Kopargaon Hackathon"
+                src="/skh3d.png"
+                alt="Smart Kopargaon Hackathon Mascot"
                 className="relative h-44 w-44 drop-shadow-2xl md:h-52 md:w-52 lg:h-64 lg:w-64 xl:h-72 xl:w-72"
                 animate={{ y: [0, -14, 0] }}
                 transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
