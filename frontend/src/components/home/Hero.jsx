@@ -44,8 +44,8 @@ export function Hero() {
           className="h-full w-full object-cover object-center"
           draggable={false}
         />
-        {/* Minimal overlay — just enough contrast for text, banner stays fully visible */}
-        <div className="absolute inset-0 bg-gradient-to-r from-white/50 via-white/15 to-transparent" />
+        {/* Minimal gradient only on left side for text contrast, logos remain fully visible */}
+        <div className="absolute inset-0 bg-gradient-to-r from-white/20 via-transparent via-30% to-transparent" />
       </div>
 
       {/* ── Ambient depth glow ── */}
