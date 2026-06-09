@@ -30,11 +30,11 @@ export function SnitchLoader({ message = 'Loading...' }) {
   }, [])
 
   return (
-    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm">
-      <div className="rounded-2xl bg-white p-8 shadow-2xl">
-        <div ref={containerRef} className="h-48 w-48" />
+    <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/20 backdrop-blur-sm">
+      <div className="flex flex-col items-center">
+        <div ref={containerRef} className="h-64 w-64" />
         {message && (
-          <p className="mt-4 text-center text-sm font-medium text-ink-700">
+          <p className="mt-2 text-center text-base font-semibold text-white drop-shadow-lg">
             {message}
           </p>
         )}
