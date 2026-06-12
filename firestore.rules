@@ -1,0 +1,272 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function userPath() {
+      return /databases/$(database)/documents/users/$(request.auth.uid);
+    }
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return signedIn() && exists(userPath()) && get(userPath()).data.role == 'admin';
+    }
+
+    function isJudge() {
+      return signedIn() && exists(userPath()) && get(userPath()).data.role == 'judge';
+    }
+
+    function isMentor() {
+      return signedIn() && exists(userPath()) && get(userPath()).data.role == 'mentor';
+    }
+
+    function ownTeamId() {
+      return exists(userPath()) && 'teamId' in get(userPath()).data
+        ? get(userPath()).data.teamId
+        : '';
+    }
+
+    function assignedProblemIds() {
+      return exists(userPath()) && 'assignedProblemStatementIds' in get(userPath()).data
+        ? get(userPath()).data.assignedProblemStatementIds
+        : [];
+    }
+
+    function judgeSeesTeam() {
+      return isJudge()
+        && 'problemStatementId' in resource.data
+        && resource.data.problemStatementId != ''
+        && resource.data.problemStatementId in assignedProblemIds();
+    }
+
+    // ─── System Config ───────────────────────────────────────────────
+    match /config/{docId} {
+      // ARCH-01: config/platform holds activeEventId — readable by all authenticated
+      // users so the frontend can resolve the active event without a backend call.
+      // config/event is kept for backward compatibility (legacy reads).
+      allow read: if docId == 'event' || docId == 'platform';
+      allow write: if isAdmin();
+    }
+
+    match /events/{eventId} {
+      // HIGH-02 fix: Restrict direct event document reads to admins only.
+      // All public event data is served through the backend API (/api/event-config,
+      // /api/events/:eventId/public) which returns a curated snapshot — not the raw
+      // document. This prevents leaking evaluationCriteria, competitionPhases,
+      // entryFeeAmount, and other admin-configured fields to authenticated users.
+      allow read: if isAdmin();
+      allow write: if isAdmin();
+    }
+
+    // ─── Audit & Security ────────────────────────────────────────────
+    match /auditLogs/{id} {
+      allow read: if isAdmin();
+      allow write: if false; // Server-only writes via Admin SDK
+    }
+
+    // Security events — append-only via Admin SDK, admin read-only
+    match /securityEvents/{id} {
+      allow read: if isAdmin();
+      allow write: if false; // Server-only via Admin SDK (securityLog.js)
+    }
+
+    // Security incidents — managed via Admin SDK, admin read-only
+    match /securityIncidents/{id} {
+      allow read: if isAdmin();
+      allow write: if false; // Server-only via Admin SDK (incidentManager.js)
+    }
+
+    // Webhook event log — admin read-only
+    match /webhookLog/{id} {
+      allow read: if isAdmin();
+      allow write: if false; // Server-only via Admin SDK (webhooks.js)
+    }
+
+    // Platform-wide activity log — admin read-only
+    match /activityLog/{id} {
+      allow read: if isAdmin();
+      allow write: if false; // Server-only via Admin SDK (activityLog.js)
+    }
+
+    // ─── Payment Idempotency (CRIT-05) ───────────────────────────────
+    // Stores one document per Razorpay paymentId to deduplicate webhook retries.
+    // Written atomically by the server inside the payment transaction.
+    match /webhookEvents/{paymentId} {
+      allow read: if isAdmin();
+      allow write: if false; // Server-only writes via Admin SDK
+    }
+
+    // ─── User Notifications (read-only, scoped to owner) ─────────────
+    match /notifications/{id} {
+      allow read: if signedIn() && resource.data.userId == request.auth.uid;
+      allow write: if false; // Server-only
+    }
+
+    // ─── User Profiles ───────────────────────────────────────────────
+    match /users/{uid} {
+      allow read: if signedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Self-registration (new user profile creation)
+      // HIGH-06 fix: Added hasOnly() to prevent clients from writing extra fields
+      // (e.g. assignedProblemStatementIds, mentorIds) during profile creation.
+      // hasAll() only checks required keys exist; hasOnly() also blocks extra keys.
+      allow create: if signedIn()
+        && request.auth.uid == uid
+        && request.resource.data.role == 'participant'
+        && request.resource.data.keys().hasAll(['email', 'role', 'teamId'])
+        && request.resource.data.keys().hasOnly([
+            'email', 'role', 'teamId', 'displayName', 'photoURL',
+            'createdAt', 'updatedAt', 'activeEventId', 'institute', 'trackChoice'
+          ])
+        && request.resource.data.teamId == '';
+
+      // Self-update: cannot change role, teamId, email, or assigned problems
+      allow update: if isAdmin()
+        || (
+          signedIn()
+          && request.auth.uid == uid
+          && request.resource.data.role == resource.data.role
+          && request.resource.data.teamId == resource.data.teamId
+          && request.resource.data.email == resource.data.email
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'role',
+            'assignedProblemStatementIds',
+            'teamId',
+            'email',
+          ])
+        );
+
+      allow delete: if false;
+    }
+
+    // ─── Teams ───────────────────────────────────────────────────────
+    match /teams/{teamId} {
+      allow get: if signedIn() && (
+        isAdmin()
+        || resource.data.leaderId == request.auth.uid
+        || request.auth.uid in resource.data.memberIds
+        || judgeSeesTeam()
+      );
+      allow list: if signedIn() && isAdmin();
+      allow create: if false; // Server-only
+      allow update: if isAdmin(); // Server-only for participants
+      allow delete: if false;
+    }
+
+    // ─── Problem Statements (public read) ────────────────────────────
+    match /problemStatements/{id} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // ─── Announcements (public read) ─────────────────────────────────
+    match /announcements/{id} {
+      allow read: if true;
+      allow create: if isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // ─── Submissions ─────────────────────────────────────────────────
+    match /submissions/{teamId} {
+      allow read: if signedIn() && (
+        isAdmin()
+        || ownTeamId() == teamId
+        || (
+          isJudge()
+          && exists(/databases/$(database)/documents/teams/$(teamId))
+          && get(/databases/$(database)/documents/teams/$(teamId)).data.problemStatementId in assignedProblemIds()
+        )
+      );
+      allow write: if false; // Server-only
+    }
+
+    // ─── Evaluations ─────────────────────────────────────────────────
+    // Issue A fix: Judges can only read evaluations they authored AND that belong
+    // to the active event. Previously the rule allowed reading evaluations from
+    // past events directly via the client SDK (bypassing the backend event scope).
+    // The evaluation document ID is {judgeId}_{teamId}, so judgeId is always stored
+    // in the document data — we check resource.data.judgeId == request.auth.uid.
+    // Admins retain full read access.
+    match /evaluations/{id} {
+      allow read: if signedIn() && (
+        isAdmin()
+        || (
+          resource.data.judgeId == request.auth.uid
+          && (
+            // Allow if no eventId stored (legacy docs) or if it matches the active event
+            !('eventId' in resource.data)
+            || resource.data.eventId == ''
+            || resource.data.eventId == get(/databases/$(database)/documents/config/platform).data.activeEventId
+          )
+        )
+      );
+      allow create, update: if false; // Server-only
+    }
+
+    // ─── Mentor Notes ────────────────────────────────────────────────
+    match /mentorNotes/{id} {
+      allow read: if signedIn() && (isAdmin() || resource.data.mentorId == request.auth.uid);
+      // HIGH-01 fix: Scope mentor note writes to teams the mentor is assigned to.
+      // Previously any mentor could write notes for any team. Now the team document
+      // must exist and the mentor's uid must be in the team's mentorIds array.
+      // Note: the frontend writes notes via the backend API (Admin SDK), so this
+      // rule only blocks malicious direct client writes.
+      allow create, update: if signedIn()
+        && isMentor()
+        && request.resource.data.mentorId == request.auth.uid
+        && exists(/databases/$(database)/documents/teams/$(request.resource.data.teamId))
+        && request.auth.uid in get(/databases/$(database)/documents/teams/$(request.resource.data.teamId)).data.mentorIds;
+      allow delete: if false;
+    }
+
+    // ─── Team Chat (read via client for real-time, write via server) ──
+    match /chats/{teamId} {
+      allow read: if signedIn() && (isAdmin() || ownTeamId() == teamId);
+      allow write: if false; // Server-only
+
+      match /messages/{messageId} {
+        allow read: if signedIn() && (isAdmin() || ownTeamId() == teamId);
+        allow write: if false; // Server-only
+      }
+    }
+
+    // ─── Mentor Chat (separate from team internal chat) ──────────────
+    // HIGH-01 fix: Scope mentor reads to teams they are actually assigned to.
+    // Previously `isMentor()` alone granted read access to ALL mentor chat rooms,
+    // allowing any mentor to read any team's private mentor conversation.
+    // Now a mentor must appear in the team's `mentorIds` array OR be assigned via
+    // a problem statement that the team selected.
+    // The `ownTeamId() == teamId` branch covers participants on that team.
+    // Admins retain full read access for moderation.
+    function mentorAssignedToTeam(teamId) {
+      return isMentor()
+        && exists(/databases/$(database)/documents/teams/$(teamId))
+        && request.auth.uid in get(/databases/$(database)/documents/teams/$(teamId)).data.mentorIds;
+    }
+
+    match /mentorChats/{teamId} {
+      allow read: if signedIn() && (
+        isAdmin()
+        || ownTeamId() == teamId
+        || mentorAssignedToTeam(teamId)
+      );
+      allow write: if false; // Server-only
+
+      match /messages/{messageId} {
+        allow read: if signedIn() && (
+          isAdmin()
+          || ownTeamId() == teamId
+          || mentorAssignedToTeam(teamId)
+        );
+        allow write: if false; // Server-only
+      }
+    }
+
+    // ─── Catch-all deny ──────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

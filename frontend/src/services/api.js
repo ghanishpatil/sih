@@ -1,0 +1,269 @@
+const base = import.meta.env.VITE_API_URL || 'http://localhost:4000'
+
+// ─── PERF: Simple in-memory cache for public GET requests ────────────────────
+// Prevents redundant network calls when components re-mount or multiple
+// components fetch the same data simultaneously.
+const _cache = new Map()
+const CACHE_TTL = 30_000 // 30 seconds
+
+function getCached(key) {
+  const entry = _cache.get(key)
+  if (!entry) return null
+  if (Date.now() - entry.at > CACHE_TTL) { _cache.delete(key); return null }
+  return entry.data
+}
+
+function setCache(key, data) {
+  _cache.set(key, { data, at: Date.now() })
+}
+
+async function cachedRequest(path) {
+  const cached = getCached(path)
+  if (cached) return cached
+  const data = await request(path)
+  setCache(path, data)
+  return data
+}
+
+async function request(path, { method = 'GET', token, body, headers = {}, eventId } = {}) {
+  const mergedHeaders = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(eventId ? { 'x-sk-event-id': eventId } : {}),
+    ...headers,
+  }
+  const res = await fetch(`${base}${path}`, {
+    method,
+    headers: mergedHeaders,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  const text = await res.text()
+  let data
+  try {
+    data = text ? JSON.parse(text) : null
+  } catch {
+    data = { raw: text }
+  }
+  if (!res.ok) {
+    const msg = data?.error || data?.message || res.statusText
+    throw new Error(msg)
+  }
+  return data
+}
+
+/** Unauthenticated reads — cached for 30s to prevent redundant calls. */
+export const publicApi = {
+  listEvents: () => cachedRequest('/api/events'),
+  getEventConfig: (eventId) =>
+    cachedRequest(
+      `/api/event-config${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`,
+    ),
+  listProblemStatements: (eventId) =>
+    cachedRequest(
+      `/api/problem-statements${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`,
+    ),
+  getTimeline: (eventId) =>
+    cachedRequest(
+      `/api/timeline${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`,
+    ),
+}
+
+export function createApi(getToken, getEventId = () => '') {
+  const ev = () => getEventId() || ''
+
+  const authReq = (path, opts = {}) =>
+    getToken().then((token) => request(path, { ...opts, token, eventId: ev() }))
+
+  return {
+    ...publicApi,
+    health: () => authReq('/api/health'),
+    me: () => authReq('/api/users/me'),
+    listUsers: () => authReq('/api/admin/users'),
+    listAdminEvents: () => authReq('/api/admin/events'),
+    createAdminEvent: (body) => authReq('/api/admin/events', { method: 'POST', body }),
+    patchAdminEvent: (eventId, body) =>
+      authReq(`/api/admin/events/${encodeURIComponent(eventId)}`, { method: 'PATCH', body }),
+    getAdminEvaluationCriteria: () => authReq('/api/admin/evaluation-criteria'),
+    listAuditLogs: (limit = 100) =>
+      authReq(`/api/admin/audit-logs?limit=${encodeURIComponent(limit)}`),
+    adminStats: () => authReq(`/api/admin/stats`),
+    updateUserRole: (uid, role) =>
+      authReq(`/api/admin/users/${uid}/role`, { method: 'PATCH', body: { role } }),
+    banUser: (uid) =>
+      authReq(`/api/admin/users/${uid}/ban`, { method: 'POST' }),
+    unbanUser: (uid) =>
+      authReq(`/api/admin/users/${uid}/unban`, { method: 'POST' }),
+    deleteUser: (uid) =>
+      authReq(`/api/admin/users/${uid}`, { method: 'DELETE' }),
+    bulkDeleteUsers: (uids) =>
+      authReq('/api/admin/users/bulk-delete', { method: 'POST', body: { uids } }),
+    // Competition Phases
+    getPhases: () => authReq('/api/admin/phases'),
+    updatePhases: (phases) => authReq('/api/admin/phases', { method: 'PUT', body: { phases } }),
+    transitionPhase: (phaseId, status) =>
+      authReq(`/api/admin/phases/${encodeURIComponent(phaseId)}/transition`, { method: 'POST', body: { status } }),
+    shortlistForPhase: (phaseId, teamIds) =>
+      authReq(`/api/admin/phases/${encodeURIComponent(phaseId)}/shortlist`, { method: 'POST', body: { teamIds } }),
+    unshortlistFromPhase: (phaseId, teamIds) =>
+      authReq(`/api/admin/phases/${encodeURIComponent(phaseId)}/unshortlist`, { method: 'POST', body: { teamIds } }),
+    updateEventConfig: (body) =>
+      authReq('/api/admin/event-config', { method: 'PATCH', body }),
+    assignJudgeProblems: (body) =>
+      authReq('/api/admin/assign-judge-problems', { method: 'POST', body }),
+    assignJudgeDomainTrack: (body) =>
+      authReq('/api/admin/judges/assign-domain-track', { method: 'POST', body }),
+    unassignJudgeDomainTrack: (body) =>
+      authReq('/api/admin/judges/unassign-domain-track', { method: 'POST', body }),
+    getJudgeAssignmentsOverview: () =>
+      authReq('/api/admin/judges/assignments-overview'),
+    recordTeamPayment: (body) =>
+      authReq('/api/admin/record-team-payment', { method: 'POST', body }),
+    // BUG FIX #8: Admin endpoint to manually record team registration
+    recordTeamRegistration: (body) =>
+      authReq('/api/admin/record-team-registration', { method: 'POST', body }),
+    broadcastAnnouncement: (payload) =>
+      authReq('/api/admin/announcements', { method: 'POST', body: payload }),
+    listAnnouncements: () =>
+      authReq('/api/admin/announcements'),
+    deleteAnnouncement: (id) =>
+      authReq(`/api/admin/announcements/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    patchAnnouncement: (id, body) =>
+      authReq(`/api/admin/announcements/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+    assignMentor: (payload) =>
+      authReq('/api/admin/mentors/assign', { method: 'POST', body: payload }),
+    assignMentorToProblem: (payload) =>
+      authReq('/api/admin/mentors/assign-problem', { method: 'POST', body: payload }),
+    unassignMentorFromProblem: (payload) =>
+      authReq('/api/admin/mentors/unassign-problem', { method: 'POST', body: payload }),
+    assignMentorDomainTrack: (payload) =>
+      authReq('/api/admin/mentors/assign-domain-track', { method: 'POST', body: payload }),
+    unassignMentorDomainTrack: (payload) =>
+      authReq('/api/admin/mentors/unassign-domain-track', { method: 'POST', body: payload }),
+    getMentorAssignmentsOverview: () =>
+      authReq('/api/admin/mentors/assignments-overview'),
+    adminTeams: (opts = {}) =>
+      authReq(`/api/admin/teams${opts.all ? '?all=1' : ''}`),
+    adminSubmissions: (opts = {}) =>
+      authReq(`/api/admin/submissions${opts.all ? '?all=1' : ''}`),
+    adminEvaluations: (opts = {}) =>
+      authReq(`/api/admin/evaluations${opts.all ? '?all=1' : ''}`),
+    patchAdminTeam: (teamId, body) =>
+      authReq(`/api/admin/teams/${encodeURIComponent(teamId)}`, { method: 'PATCH', body }),
+    deleteAdminTeamRegistration: (teamId) =>
+      authReq(`/api/admin/teams/${encodeURIComponent(teamId)}/registration`, { method: 'DELETE' }),
+    // BUG FIX #6: Cleanup orphaned member registrations
+    cleanupOrphanedRegistrations: (teamId) =>
+      authReq(`/api/registrations/team/${encodeURIComponent(teamId)}/cleanup`, { method: 'DELETE' }),
+    // BUG FIX #7: Update member registration status
+    updateMemberRegistrationStatus: (registrationId, status) =>
+      authReq(`/api/registrations/member/${encodeURIComponent(registrationId)}/status`, { method: 'PUT', body: { status } }),
+    // BUG FIX #6: Delete single member registration
+    deleteMemberRegistration: (registrationId) =>
+      authReq(`/api/registrations/member/${encodeURIComponent(registrationId)}`, { method: 'DELETE' }),
+    bulkOperation: (body) =>
+      authReq('/api/admin/bulk-operation', { method: 'POST', body }),
+    exportTeams: () => authReq('/api/admin/export/teams'),
+    exportSubmissions: () => authReq('/api/admin/export/submissions'),
+    patchAdminProblemStatement: (psId, body) =>
+      authReq(`/api/admin/problem-statements/${encodeURIComponent(psId)}`, { method: 'PATCH', body }),
+    createAdminProblemStatement: (body) => authReq('/api/admin/problem-statements', { method: 'POST', body }),
+    bulkImportProblemStatements: (items) =>
+      authReq('/api/admin/problem-statements/bulk-import', { method: 'POST', body: { items } }),
+    deleteAdminProblemStatement: (psId) =>
+      authReq(`/api/admin/problem-statements/${encodeURIComponent(psId)}`, { method: 'DELETE' }),
+    adminSystemHealth: () => authReq('/api/admin/system-health'),
+    // Security Center
+    listPlatformActivity: (limit = 300) => authReq(`/api/admin/security/activity?limit=${limit}`),
+    listSecurityEvents: (limit = 200) => authReq(`/api/admin/security/events?limit=${limit}`),
+    listSecurityIncidents: () => authReq('/api/admin/security/incidents'),
+    createSecurityIncident: (body) => authReq('/api/admin/security/incidents', { method: 'POST', body }),
+    updateSecurityIncident: (id, body) => authReq(`/api/admin/security/incidents/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
+    listWebhookLog: (limit = 100) => authReq(`/api/admin/security/webhook-log?limit=${limit}`),
+    getDuplicateTeams: () => authReq('/api/admin/security/duplicate-teams'),
+    getTimeline: () => authReq('/api/timeline'),
+    updateTimeline: (phases) =>
+      authReq('/api/admin/timeline', { method: 'PUT', body: { phases } }),
+    lookupInvite: (inviteCode) =>
+      authReq('/api/participant/lookup-invite', { method: 'POST', body: { inviteCode } }),
+    createTeam: (name, eventIdOverride) =>
+      authReq('/api/participant/create-team', {
+        method: 'POST',
+        body: { name, eventId: eventIdOverride || ev() },
+      }),
+    joinTeam: (inviteCode) =>
+      authReq('/api/participant/join-team', { method: 'POST', body: { inviteCode } }),
+    registerTeamEvent: (paymentChoice = 'now') =>
+      authReq('/api/participant/register-team-event', { method: 'POST', body: { paymentChoice } }),
+    createRazorpayOrder: () =>
+      authReq('/api/participant/create-razorpay-order', { method: 'POST' }),
+    verifyRazorpayPayment: (body) =>
+      authReq('/api/participant/verify-razorpay-payment', { method: 'POST', body }),
+    selectProblem: (problemStatementId) =>
+      authReq('/api/participant/select-problem', {
+        method: 'POST',
+        body: { problemStatementId },
+      }),
+    patchSubmissionMetadata: (patch) =>
+      authReq('/api/participant/submission-metadata', { method: 'POST', body: { patch } }),
+    finalizeSubmission: () =>
+      authReq('/api/participant/finalize-submission', { method: 'POST' }),
+    getSubmissionVersions: () =>
+      authReq('/api/participant/submission-versions'),
+    judgeAssignments: () => authReq('/api/judges/assignments'),
+    judgeTeamReview: (teamId) => authReq(`/api/judges/review/${encodeURIComponent(teamId)}`),
+    submitEvaluation: (payload) =>
+      authReq('/api/judges/evaluations', { method: 'POST', body: payload }),
+    mentorAssignments: () => authReq('/api/mentors/assignments'),
+    mentorNote: (payload) =>
+      authReq('/api/mentors/notes', { method: 'POST', body: payload }),
+    mentorTeamChatMessages: (teamId, limit = 50) =>
+      authReq(`/api/mentors/chat/${encodeURIComponent(teamId)}/messages?limit=${limit}`),
+    mentorTeamChatSend: (teamId, text, replyTo, file) =>
+      authReq(`/api/mentors/chat/${encodeURIComponent(teamId)}/send`, { method: 'POST', body: {
+        text,
+        replyTo,
+        ...(file ? { fileUrl: file.url, fileName: file.name, fileType: file.type, fileSize: file.size } : {}),
+      } }),
+    teamRoster: () => authReq('/api/participant/team-roster'),
+    mentorChatMessages: (limit = 50) =>
+      authReq(`/api/participant/mentor-chat/messages?limit=${limit}`),
+    mentorChatSend: (text, replyTo, file) =>
+      authReq('/api/participant/mentor-chat/send', { method: 'POST', body: {
+        text,
+        replyTo,
+        ...(file ? { fileUrl: file.url, fileName: file.name, fileType: file.type, fileSize: file.size } : {}),
+      } }),
+    mentorChatUnread: () =>
+      authReq('/api/participant/mentor-chat/unread'),
+    mentorChatMarkRead: () =>
+      authReq('/api/participant/mentor-chat/mark-read', { method: 'POST' }),
+    leaveTeam: () => authReq('/api/participant/leave-team', { method: 'POST' }),
+    removeTeamMember: (memberUid) =>
+      authReq('/api/participant/remove-team-member', { method: 'POST', body: { memberUid } }),
+    updateTeamProfile: (profile) =>
+      authReq('/api/participant/update-team-profile', { method: 'POST', body: profile }),
+    updateMemberDesignation: (memberUid, designation) =>
+      authReq('/api/participant/update-member-designation', { method: 'POST', body: { memberUid, designation } }),
+    // Chat
+    chatInfo: () => authReq('/api/chat/info'),
+    chatMessages: (limit = 50, before) =>
+      authReq(`/api/chat/messages?limit=${limit}${before ? `&before=${encodeURIComponent(before)}` : ''}`),
+    chatSend: (text, replyTo, file) =>
+      authReq('/api/chat/send', { method: 'POST', body: {
+        text,
+        replyTo,
+        ...(file ? { fileUrl: file.url, fileName: file.name, fileType: file.type, fileSize: file.size } : {}),
+      } }),
+    chatDeleteMessage: (messageId) =>
+      authReq(`/api/chat/messages/${encodeURIComponent(messageId)}`, { method: 'DELETE' }),
+    // Admin notifications
+    sendPaymentReminders: () =>
+      authReq('/api/admin/send-payment-reminders', { method: 'POST' }),
+    sendSubmissionReminders: (hoursLeft = 24) =>
+      authReq('/api/admin/send-submission-reminders', { method: 'POST', body: { hoursLeft } }),
+    adminChatbot: (message, history) =>
+      authReq('/api/admin/chatbot', { method: 'POST', body: { message, history } }),
+    adminTestEmail: () =>
+      authReq('/api/admin/test-email', { method: 'POST' }),
+  }
+}

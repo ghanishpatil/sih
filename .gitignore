@@ -1,0 +1,36 @@
+# Documentation & status files (not needed in repo)
+*.md
+!README.md
+
+# Node modules
+node_modules/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Firebase credentials
+*firebase-adminsdk*.json
+smart-kop-firebase-adminsdk-fbsvc-f84be15fe2.json
+
+# Build outputs
+dist/
+dist-ssr/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+
+# Firebase local emulator data
+.firebase/
+firebase-debug.log
+ui-debug.log
