@@ -2,7 +2,7 @@ import { Router } from 'express'
 import { FieldValue } from 'firebase-admin/firestore'
 import { randomInt } from 'crypto'
 import { getDb } from '../services/firebaseAdmin.js'
-import { BRAND } from '../services/brand.js'
+import { BRAND, FIXED_COLLEGE } from '../services/brand.js'
 import { verifyFirebaseToken, loadUserRole, requireRole } from '../middleware/auth.js'
 import { attachEventContext } from '../middleware/eventContext.js'
 import { teamMaySelectProblem } from '../services/eventConfig.js'
@@ -236,8 +236,10 @@ r.post('/create-team', async (req, res, next) => {
  *
  * Body: {
  *   teamName?: string,
- *   members: [{ fullName, email, phone, college, collegeLocation, yearOfStudy, department }]
+ *   members: [{ fullName, email, phone, prn, yearOfStudy, department }]
  * }
+ * The college is NOT accepted from the client — every participant belongs to
+ * FIXED_COLLEGE, which is stamped onto each registration server-side.
  * members[0] is treated as the team leader.
  */
 r.post('/register-team-members', async (req, res, next) => {
@@ -286,10 +288,12 @@ r.post('/register-team-members', async (req, res, next) => {
 
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     const phoneRegex = /^\d{10}$/
+    const prnRegex = /^[A-Z0-9/-]{4,30}$/
     const clean = (v, max) => String(v ?? '').trim().slice(0, max)
 
     const seenEmails = new Set()
     const seenPhones = new Set()
+    const seenPrns = new Set()
     const members = []
 
     for (let i = 0; i < rawMembers.length; i++) {
@@ -297,8 +301,7 @@ r.post('/register-team-members', async (req, res, next) => {
       const fullName = clean(m.fullName, 100)
       const email = clean(m.email, 120).toLowerCase()
       const phone = clean(m.phone, 10)
-      const college = clean(m.college, 150)
-      const collegeLocation = clean(m.collegeLocation, 150)
+      const prn = clean(m.prn, 30).toUpperCase()
       const yearOfStudy = clean(m.yearOfStudy, 40)
       const department = clean(m.department, 100)
       const label = `Member ${i + 1}`
@@ -306,17 +309,19 @@ r.post('/register-team-members', async (req, res, next) => {
       if (!fullName) return res.status(400).json({ error: `${label}: full name is required.` })
       if (!email || !emailRegex.test(email)) return res.status(400).json({ error: `${label}: a valid email is required.` })
       if (!phoneRegex.test(phone)) return res.status(400).json({ error: `${label}: phone number must be exactly 10 digits.` })
-      if (!college) return res.status(400).json({ error: `${label}: college name is required.` })
-      if (!collegeLocation) return res.status(400).json({ error: `${label}: college location is required.` })
+      if (!prn) return res.status(400).json({ error: `${label}: PRN number is required.` })
+      if (!prnRegex.test(prn)) return res.status(400).json({ error: `${label}: PRN must be 4–30 letters, digits, - or /.` })
       if (!yearOfStudy) return res.status(400).json({ error: `${label}: year of study is required.` })
       if (!department) return res.status(400).json({ error: `${label}: department is required.` })
 
       if (seenEmails.has(email)) return res.status(400).json({ error: `Duplicate email within team: ${email}` })
       if (seenPhones.has(phone)) return res.status(400).json({ error: `Duplicate phone number within team: ${phone}` })
+      if (seenPrns.has(prn)) return res.status(400).json({ error: `Duplicate PRN within team: ${prn}` })
       seenEmails.add(email)
       seenPhones.add(phone)
+      seenPrns.add(prn)
 
-      members.push({ fullName, email, phone, college, collegeLocation, yearOfStudy, department, isLeader: i === 0, order: i })
+      members.push({ fullName, email, phone, prn, yearOfStudy, department, isLeader: i === 0, order: i })
     }
 
     const teamName = clean(req.body?.teamName, 80) || team.name || 'Untitled team'
@@ -333,8 +338,9 @@ r.post('/register-team-members', async (req, res, next) => {
       const ref = db.collection('memberRegistrations').doc()
       batch.set(ref, {
         name: m.fullName,
-        institute: m.college,
-        collegeLocation: m.collegeLocation,
+        // College is fixed for this event — never taken from the client.
+        institute: FIXED_COLLEGE,
+        prn: m.prn,
         yearOfStudy: m.yearOfStudy,
         department: m.department,
         email: m.email,
@@ -1024,6 +1030,9 @@ r.post('/submission-metadata', async (req, res, next) => {
     // Schedule-based gating: submissions are controlled purely by the event
     // schedule (submissionsOpen flag + submissionDeadline). Finals get their own
     // window gated by finalist status + finalsSubmissionLocked.
+    if (merged.submissionsEnabled === false) {
+      return res.status(403).json({ error: 'Submissions are not enabled for this event.', disabled: true })
+    }
     const finalsMode = merged.finalistsOnly === true
 
     if (finalsMode) {
@@ -1081,6 +1090,9 @@ r.post('/finalize-submission', async (req, res, next) => {
     if (blockedFin) return res.status(403).json({ error: blockedFin })
 
     // Schedule-based finalize gating. Finals get their own window + lock.
+    if (merged.submissionsEnabled === false) {
+      return res.status(403).json({ error: 'Submissions are not enabled for this event.', disabled: true })
+    }
     const finalsModeFinalize = merged.finalistsOnly === true
 
     if (finalsModeFinalize) {
@@ -1264,8 +1276,8 @@ r.get('/team-roster', async (req, res, next) => {
               fullName: x.name || '',
               email: x.email || '',
               phone: x.phone || '',
-              college: x.institute || '',
-              collegeLocation: x.collegeLocation || '',
+              college: x.institute || FIXED_COLLEGE,
+              prn: x.prn || '',
               yearOfStudy: x.yearOfStudy || '',
               department: x.department || '',
               isLeader: Boolean(x.isLeader),

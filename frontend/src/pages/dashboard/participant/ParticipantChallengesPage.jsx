@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from 'react'
+import { Navigate } from 'react-router-dom'
 import { Swords, Timer, Lock, CheckCircle2 } from 'lucide-react'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
 import { useApi } from '@/hooks/useApi.js'
+import { useEvent } from '@/context/EventContext.jsx'
 import { Card } from '@/components/ui/Card.jsx'
 import { Badge } from '@/components/ui/Badge.jsx'
 import { Skeleton } from '@/components/ui/Skeleton.jsx'
@@ -21,6 +23,7 @@ const pad = (n) => String(n).padStart(2, '0')
 export function ParticipantChallengesPage() {
   usePageSeo({ title: 'Challenges', description: 'Live challenge drops.' })
   const api = useApi()
+  const { eventCfg, eventLoading } = useEvent()
 
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -57,6 +60,7 @@ export function ParticipantChallengesPage() {
     return () => clearInterval(id)
   }, [])
 
+  const challengesEnabled = eventCfg?.challengesEnabled === true
   const effectiveNow = now + serverOffset
   const nextDropMs = data?.nextDropAt ? new Date(data.nextDropAt).getTime() : null
 
@@ -67,6 +71,11 @@ export function ParticipantChallengesPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nextDropMs, effectiveNow >= (nextDropMs || Infinity)])
+
+  // Route guard: if an admin turned Challenges off, redirect away.
+  if (!eventLoading && eventCfg && !challengesEnabled) {
+    return <Navigate to="/dashboard" replace />
+  }
 
   if (loading) {
     return (

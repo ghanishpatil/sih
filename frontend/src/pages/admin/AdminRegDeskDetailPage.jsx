@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
-  ArrowLeft, Download, RefreshCw, Users, UserCheck, Building2, MapPin, Phone,
+  ArrowLeft, Download, RefreshCw, Users, UserCheck, Building2, Phone,
   GraduationCap, Crown, Layers, Search, ChevronDown, ClipboardCheck, Clock,
 } from 'lucide-react'
 import { useApi } from '@/hooks/useApi.js'
@@ -152,7 +152,7 @@ export function AdminRegDeskDetailPage({ basePath = '/admin/registration-desk' }
                       <p className="truncate font-display font-semibold text-ink-900">{team.name}</p>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-500">
                         {team.college && <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> {team.college}</span>}
-                        {team.collegeLocation && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> {team.collegeLocation}</span>}
+                        {team.prn && <span className="inline-flex items-center gap-1">PRN {team.prn}</span>}
                       </div>
                     </div>
                     <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-bold ${full ? 'bg-emerald-500/15 text-emerald-700' : 'bg-[rgb(var(--surface-muted))] text-ink-600'}`}>
@@ -182,7 +182,7 @@ export function AdminRegDeskDetailPage({ basePath = '/admin/registration-desk' }
                                   <span className="inline-flex items-center gap-1"><GraduationCap className="h-3 w-3" /> {[m.yearOfStudy, m.department].filter(Boolean).join(' · ')}</span>
                                 )}
                                 {m.college && <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> {m.college}</span>}
-                                {m.collegeLocation && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> {m.collegeLocation}</span>}
+                                {m.prn && <span className="inline-flex items-center gap-1">PRN {m.prn}</span>}
                               </div>
                               {m.present && m.attendanceAtMs && (
                                 <span className="mt-1 inline-flex items-center gap-1 text-[11px] text-ink-400"><Clock className="h-3 w-3" /> {fmtTime(m.attendanceAtMs)}</span>

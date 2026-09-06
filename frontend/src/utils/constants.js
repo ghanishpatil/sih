@@ -10,9 +10,6 @@ export const APP = {
   region: 'Sanjivani University',
   parentEvent: 'Smart India Hackathon',
   tagline: 'Sanjivani University’s internal qualifier for the Smart India Hackathon',
-  contactEmail: 'sih@sanjivani.edu.in',
-  contactPhone: '+91 74983 11334',
-  venue: 'Sanjivani University Innovation Campus',
   // Brand mark (SIH wordmark). Lives at `frontend/public/sih-logo.png`; every
   // surface reads it from here via the BrandLogo component.
   logo: '/sih-logo.png',
@@ -28,19 +25,6 @@ export const SOCIAL_LINKS = {
   linkedin: 'https://www.linkedin.com/company/smart-kopargaon-hackathon/',
   github: 'https://github.com/smartkopargaonhackathon-su',
   whatsapp: 'https://whatsapp.com/channel/0029VbBnF0wGk1FvfjRRqh3G',
-}
-
-// Student coordinators & team leaders — shown in the footer and Contact page.
-export const COORDINATORS = {
-  coordinators: [
-    { name: 'Ashish Pardeshi', email: 'ashish.pardeshi24@sanjivani.edu.in', role: 'Student Coordinator' },
-    { name: 'Avani Kulkarni', email: 'avani.kulkarni24@sanjivani.edu.in', role: 'Student Coordinator' },
-  ],
-  leaders: [
-    { name: 'Atharva Deshmukh', phone: '7517647277' },
-    { name: 'Saifullah Pathan', phone: '7219502062' },
-    { name: 'Soham Kadu', phone: '9021538647', role: 'Hospitality Head' },
-  ],
 }
 
 // External UMS event-registration portal (Sanjivani University).

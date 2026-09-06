@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import {
   LayoutDashboard, LogOut, Gavel, Users, FileUp, Megaphone, Home,
@@ -145,10 +145,18 @@ export function DashboardLayout({ variant = 'default' }) {
   const currentRole = profile?.role || ROLES.PARTICIPANT
   const navKey = (variant === 'admin' && currentRole === ROLES.VIEWER) ? 'viewer' : variant
   const baseItems = nav[navKey] || nav.default
-  // Feature 1: Hide "Find Teammates" unless admin enabled matchmaking for the event.
-  const matchmakingEnabled = Boolean(eventCfg?.matchmakingEnabled)
-  const items = (variant === 'participant' && !matchmakingEnabled)
-    ? baseItems.filter((it) => it.to !== '/dashboard/matchmaking')
+  // Admin-controlled participant feature switches. Any feature turned off in
+  // Event Settings has its sidebar entry removed (the pages themselves also
+  // redirect, and the API rejects writes, so this is presentation only).
+  const hiddenParticipantPaths = useMemo(() => {
+    const hidden = new Set()
+    if (!eventCfg?.matchmakingEnabled) hidden.add('/dashboard/matchmaking')
+    if (eventCfg?.submissionsEnabled === false) hidden.add('/dashboard/submission')
+    if (eventCfg?.challengesEnabled !== true) hidden.add('/dashboard/challenges')
+    return hidden
+  }, [eventCfg?.matchmakingEnabled, eventCfg?.submissionsEnabled, eventCfg?.challengesEnabled])
+  const items = variant === 'participant'
+    ? baseItems.filter((it) => !it.to || !hiddenParticipantPaths.has(it.to))
     : baseItems
   const role = profile?.role || ROLES.PARTICIPANT
 

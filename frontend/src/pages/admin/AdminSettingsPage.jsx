@@ -454,6 +454,8 @@ export function AdminSettingsPage() {
     evaluationsOpen: false,
     resultsPublished: false,
     matchmakingEnabled: false,
+    submissionsEnabled: true,
+    challengesEnabled: false,
     entryFeeEnabled: false,
     entryFeeAmount: 0,
     currency: 'INR',
@@ -478,6 +480,8 @@ export function AdminSettingsPage() {
       evaluationsOpen: Boolean(eventCfg.evaluationsOpen),
       resultsPublished: Boolean(eventCfg.resultsPublished),
       matchmakingEnabled: Boolean(eventCfg.matchmakingEnabled),
+      submissionsEnabled: eventCfg.submissionsEnabled !== false,
+      challengesEnabled: eventCfg.challengesEnabled === true,
       entryFeeEnabled: Boolean(eventCfg.entryFeeEnabled),
       entryFeeAmount: Number(eventCfg.entryFeeAmount) || 0,
       currency: eventCfg.currency || 'INR',
@@ -496,6 +500,8 @@ export function AdminSettingsPage() {
         evaluationsOpen: eventForm.evaluationsOpen,
         resultsPublished: eventForm.resultsPublished,
         matchmakingEnabled: eventForm.matchmakingEnabled,
+        submissionsEnabled: eventForm.submissionsEnabled,
+        challengesEnabled: eventForm.challengesEnabled,
         entryFeeEnabled: eventForm.entryFeeEnabled,
         entryFeeAmount: Number(eventForm.entryFeeAmount) || 0,
         currency: eventForm.currency || 'INR',
@@ -597,6 +603,20 @@ export function AdminSettingsPage() {
             onChange={(v) => setEventForm((f) => ({ ...f, matchmakingEnabled: v }))}
             title="Team Matchmaking"
             description="Shows the Find Teammates page so solo participants can discover each other and request to join open teams. When off, the page is hidden from all participants."
+            tone="brand"
+          />
+          <ToggleRow
+            checked={eventForm.submissionsEnabled}
+            onChange={(v) => setEventForm((f) => ({ ...f, submissionsEnabled: v }))}
+            title="Submissions"
+            description="Shows the Submission page and its step in My Progress. When off, the page, its sidebar link and the progress step are hidden, and the server rejects submission saves."
+            tone="brand"
+          />
+          <ToggleRow
+            checked={eventForm.challengesEnabled}
+            onChange={(v) => setEventForm((f) => ({ ...f, challengesEnabled: v }))}
+            title="Challenges"
+            description="Shows the Challenges page and releases the scheduled drops. When off, the page and its sidebar link are hidden from all participants. This is the same switch as on the admin Challenges page."
             tone="brand"
           />
         </div>

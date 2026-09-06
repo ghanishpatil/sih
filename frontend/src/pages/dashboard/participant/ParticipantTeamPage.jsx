@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Clock, Crown, LogOut, Users, Pencil, Github, Linkedin, Globe, Tag, Shield, Sparkles, Mail, Phone, MapPin, GraduationCap, Building2, Info, ArrowRight, Hash, Copy, Check } from 'lucide-react'
+import { Clock, Crown, LogOut, Users, Pencil, Github, Linkedin, Globe, Tag, Shield, Sparkles, Mail, Phone, GraduationCap, Building2, Info, ArrowRight, Hash, Copy, Check } from 'lucide-react'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
 import { useParticipantWorkspace } from '@/hooks/useParticipantWorkspace.js'
 import { useAuth } from '@/context/AuthContext.jsx'
@@ -219,7 +219,7 @@ export function ParticipantTeamPage() {
                       <p className="flex items-center gap-2"><Mail className="h-3.5 w-3.5 text-ink-400" /> <span className="truncate">{m.email}</span></p>
                       <p className="flex items-center gap-2"><Phone className="h-3.5 w-3.5 text-ink-400" /> {m.phone}</p>
                       <p className="flex items-center gap-2"><Building2 className="h-3.5 w-3.5 text-ink-400" /> <span className="truncate">{m.college}</span></p>
-                      <p className="flex items-center gap-2"><MapPin className="h-3.5 w-3.5 text-ink-400" /> <span className="truncate">{m.collegeLocation}</span></p>
+                      <p className="flex items-center gap-2"><Hash className="h-3.5 w-3.5 text-ink-400" /> <span className="truncate">PRN {m.prn}</span></p>
                     </div>
                   </Card>
                 ))}

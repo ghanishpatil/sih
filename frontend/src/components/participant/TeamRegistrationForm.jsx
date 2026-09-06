@@ -3,6 +3,7 @@ import { Check, Loader2, Info, Crown, Users } from 'lucide-react'
 import { Card } from '@/components/ui/Card.jsx'
 import { Button } from '@/components/ui/Button.jsx'
 import { Input } from '@/components/ui/Input.jsx'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog.jsx'
 
 const YEAR_OPTIONS = ['1st Year', '2nd Year', '3rd Year', '4th Year']
 
@@ -29,13 +30,17 @@ const FIELD_LABEL_CLASS = 'mb-1.5 block text-sm font-medium text-ink-700'
 const FIELD_SELECT_CLASS =
   'h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-4 text-sm text-ink-900 shadow-sm transition-all duration-200 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20'
 
+// Every participant is from Sanjivani University, so the college is fixed
+// rather than typed in. Kept as a constant so the label and the submitted
+// value can never drift apart.
+export const FIXED_COLLEGE = 'Sanjivani University'
+
 function emptyMember() {
   return {
     fullName: '',
     email: '',
     phone: '',
-    college: '',
-    collegeLocation: '',
+    prn: '',
     yearOfStudy: '',
     department: '',
   }
@@ -56,8 +61,7 @@ export function TeamRegistrationForm({ team, user, profile, api, maxTeamSize = 4
           fullName: m.fullName || '',
           email: m.email || '',
           phone: m.phone || '',
-          college: m.college || '',
-          collegeLocation: m.collegeLocation || '',
+          prn: m.prn || '',
           yearOfStudy: m.yearOfStudy || '',
           department: m.department || '',
         }))
@@ -73,6 +77,7 @@ export function TeamRegistrationForm({ team, user, profile, api, maxTeamSize = 4
   const [members, setMembers] = useState(initialMembers)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
+  const [confirmOpen, setConfirmOpen] = useState(false)
 
   const size = members.length
 
@@ -94,30 +99,41 @@ export function TeamRegistrationForm({ team, user, profile, api, maxTeamSize = 4
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     const seenEmail = new Set()
     const seenPhone = new Set()
+    const seenPrn = new Set()
     for (let i = 0; i < members.length; i++) {
       const m = members[i]
       const who = i === 0 ? 'Team leader' : `Member ${i + 1}`
       if (!m.fullName.trim()) return `${who}: full name is required.`
       if (!emailRe.test(m.email.trim())) return `${who}: a valid email is required.`
       if (!/^\d{10}$/.test(m.phone.trim())) return `${who}: phone must be exactly 10 digits.`
-      if (!m.college.trim()) return `${who}: college name is required.`
-      if (!m.collegeLocation.trim()) return `${who}: college location is required.`
+      if (!m.prn.trim()) return `${who}: PRN number is required.`
+      if (!/^[A-Za-z0-9/-]{4,30}$/.test(m.prn.trim())) return `${who}: PRN looks invalid — use 4–30 letters, digits, - or /.`
       if (!m.yearOfStudy.trim()) return `${who}: year of study is required.`
       if (!m.department.trim()) return `${who}: department is required.`
       const em = m.email.trim().toLowerCase()
       const ph = m.phone.trim()
+      const pr = m.prn.trim().toUpperCase()
       if (seenEmail.has(em)) return `Duplicate email within team: ${em}`
       if (seenPhone.has(ph)) return `Duplicate phone within team: ${ph}`
+      if (seenPrn.has(pr)) return `Duplicate PRN within team: ${pr}`
       seenEmail.add(em)
       seenPhone.add(ph)
+      seenPrn.add(pr)
     }
     return ''
   }
 
-  async function handleSubmit(e) {
+  // Step 1: validate, then ask the leader to re-check every member's details.
+  function handleSubmit(e) {
     e.preventDefault()
     const v = validate()
     if (v) { setError(v); return }
+    setError('')
+    setConfirmOpen(true)
+  }
+
+  // Step 2: actually save, only after the leader confirms the review.
+  async function saveMembers() {
     setSaving(true)
     setError('')
     try {
@@ -127,14 +143,15 @@ export function TeamRegistrationForm({ team, user, profile, api, maxTeamSize = 4
           fullName: m.fullName.trim(),
           email: m.email.trim(),
           phone: m.phone.trim(),
-          college: m.college.trim(),
-          collegeLocation: m.collegeLocation.trim(),
+          prn: m.prn.trim().toUpperCase(),
           yearOfStudy: m.yearOfStudy.trim(),
           department: m.department.trim(),
         })),
       })
+      setConfirmOpen(false)
       onSuccess?.()
     } catch (err) {
+      setConfirmOpen(false)
       setError(err?.message || 'Could not save team details.')
     } finally {
       setSaving(false)
@@ -209,8 +226,26 @@ export function TeamRegistrationForm({ team, user, profile, api, maxTeamSize = 4
               <Input label="Full Name" value={m.fullName} onChange={(e) => update(idx, 'fullName', e.target.value)} placeholder="Full name" maxLength={100} required />
               <Input label="Email" type="email" value={m.email} onChange={(e) => update(idx, 'email', e.target.value)} placeholder="email@example.com" maxLength={120} required />
               <Input label="Mobile Number" type="tel" inputMode="numeric" value={m.phone} onChange={(e) => update(idx, 'phone', e.target.value.replace(/\D/g, '').slice(0, 10))} placeholder="10-digit number" maxLength={10} required />
-              <Input label="College Name" value={m.college} onChange={(e) => update(idx, 'college', e.target.value)} placeholder="College / Institute" maxLength={150} required />
-              <Input label="College Location" value={m.collegeLocation} onChange={(e) => update(idx, 'collegeLocation', e.target.value)} placeholder="City / District" maxLength={150} required />
+              <Input
+                label="PRN Number"
+                value={m.prn}
+                onChange={(e) => update(idx, 'prn', e.target.value.toUpperCase().replace(/[^A-Z0-9/-]/g, '').slice(0, 30))}
+                placeholder="e.g. 2024CS1234"
+                maxLength={30}
+                required
+              />
+              <div>
+                <label className={FIELD_LABEL_CLASS}>College</label>
+                <input
+                  type="text"
+                  value={FIXED_COLLEGE}
+                  readOnly
+                  aria-readonly="true"
+                  tabIndex={-1}
+                  className="h-11 w-full cursor-not-allowed rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface-muted))] px-4 text-sm text-ink-600 shadow-sm"
+                />
+                <p className="mt-1.5 text-xs text-ink-500">All participants are from {FIXED_COLLEGE}.</p>
+              </div>
               <div>
                 <label className={FIELD_LABEL_CLASS}>Year of Study</label>
                 <select
@@ -260,6 +295,36 @@ export function TeamRegistrationForm({ team, user, profile, api, maxTeamSize = 4
           )}
         </Button>
       </form>
+
+      {/* Review step — the leader re-checks every member before saving. */}
+      <ConfirmDialog
+        open={confirmOpen}
+        tone="info"
+        title="Check all team member details once"
+        description={`Please confirm that details for all ${size} member${size === 1 ? '' : 's'} of "${teamName.trim()}" are filled in correctly.`}
+        confirmLabel="Yes, details are correct"
+        cancelLabel="Go back and edit"
+        busy={saving}
+        onCancel={() => setConfirmOpen(false)}
+        onConfirm={() => void saveMembers()}
+      >
+        <ul className="max-h-64 space-y-2 overflow-y-auto">
+          {members.map((m, i) => (
+            <li key={i} className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--surface-muted))]/50 px-3 py-2">
+              <p className="text-sm font-semibold text-ink-900">
+                {i === 0 ? 'Team Leader' : `Member ${i + 1}`}: {m.fullName.trim()}
+              </p>
+              <p className="mt-0.5 text-xs text-ink-600">
+                PRN {m.prn.trim()} · {m.department.trim()} · {m.yearOfStudy.trim()}
+              </p>
+              <p className="text-xs text-ink-500">{m.email.trim()} · {m.phone.trim()}</p>
+            </li>
+          ))}
+        </ul>
+        <p className="text-xs text-ink-500">
+          You can still edit these details until you confirm your event registration.
+        </p>
+      </ConfirmDialog>
     </Card>
   )
 }

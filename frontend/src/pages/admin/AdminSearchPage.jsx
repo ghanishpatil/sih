@@ -113,7 +113,7 @@ function ResultCard({ match, team }) {
             <div className="mt-1 flex flex-col gap-0.5 text-sm text-ink-600">
               {match.email ? <span className="flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-ink-400" /> {match.email}</span> : null}
               {match.phone ? <span className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-ink-400" /> {match.phone}</span> : null}
-              {match.college ? <span className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-ink-400" /> {match.college}{match.collegeLocation ? `, ${match.collegeLocation}` : ''}</span> : null}
+              {match.college ? <span className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-ink-400" /> {match.college}{match.prn ? ` · PRN ${match.prn}` : ''}</span> : null}
               {(match.department || match.yearOfStudy) ? (
                 <span className="flex items-center gap-1.5"><GraduationCap className="h-3.5 w-3.5 text-ink-400" /> {[match.department, match.yearOfStudy].filter(Boolean).join(' · ')}</span>
               ) : null}
@@ -183,7 +183,7 @@ function ResultCard({ match, team }) {
                       </td>
                       <td className="px-3 py-2 text-xs text-ink-600">
                         <div className="flex items-center gap-1"><Building2 className="h-3 w-3 text-ink-400" /> {m.college || '—'}</div>
-                        {m.collegeLocation ? <div className="text-ink-400">{m.collegeLocation}</div> : null}
+                        {m.prn ? <div className="text-ink-400">PRN {m.prn}</div> : null}
                       </td>
                       <td className="px-3 py-2 text-xs text-ink-600">
                         <div className="flex items-center gap-1"><GraduationCap className="h-3 w-3 text-ink-400" /> {m.department || '—'}</div>

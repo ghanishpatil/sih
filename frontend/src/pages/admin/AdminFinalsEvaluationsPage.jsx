@@ -170,7 +170,7 @@ export function AdminFinalsEvaluationsPage() {
       setPsMap(m)
       const cm = new Map()
       for (const t of Array.isArray(tc?.teams) ? tc.teams : []) {
-        cm.set(t.teamId, { college: t.college || '', collegeLocation: t.collegeLocation || '' })
+        cm.set(t.teamId, { college: t.college || '', prn: t.prn || '' })
       }
       setCollegeByTeam(cm)
     } catch (e) {

@@ -16,13 +16,32 @@ export const BRAND = {
   university: 'Sanjivani University',
   parentEvent: 'Smart India Hackathon',
   location: 'Kopargaon, Maharashtra, India',
-  supportEmail: 'sih@sanjivani.edu.in',
+  /**
+   * Public site origin used in EMAILS (links + image URLs).
+   *
+   * Deliberately independent of FRONTEND_URL: that variable also drives CORS and
+   * may still point at an older host, whereas every mail we send must land on the
+   * current public site. Override with PUBLIC_SITE_URL if the domain changes.
+   */
+  siteUrl: 'https://sih.sanjivaniuniversity.com',
 }
 
-/** Official social accounts shown in email footers. */
-export const SOCIALS = {
-  twitter: 'https://x.com/skhackathon',
-  instagram: 'https://instagram.com/smartkophack.su',
+/**
+ * Every participant in this event belongs to the host university, so the college
+ * is stamped server-side at registration instead of being typed in (and is never
+ * trusted from the client).
+ */
+export const FIXED_COLLEGE = BRAND.university
+
+/** Public site origin for emails, without a trailing slash. */
+export function siteUrl() {
+  const fromEnv = String(process.env.PUBLIC_SITE_URL || '').trim()
+  return (fromEnv || BRAND.siteUrl).replace(/\/+$/, '')
+}
+
+/** Canonical login URL used by every credentials / access email. */
+export function brandLoginUrl() {
+  return `${siteUrl()}/auth`
 }
 
 /** Email palette — kept in one place so templates and inline HTML agree. */
@@ -35,25 +54,26 @@ export const EMAIL_COLORS = {
 }
 
 /**
- * Brand assets, resolved against the frontend origin at call time.
- * `logo` is the square mark; `partners` is the partner-logos strip.
+ * Logos used in email headers — the Smart India Hackathon wordmark and the
+ * Sanjivani University mark. These are the ONLY images our emails embed: the
+ * old partner-logo strip, the retired SKH bulb graphic and the social icons
+ * were intentionally removed.
  */
 export function brandAssets(base) {
-  const origin = String(base || '').replace(/\/$/, '')
+  const origin = String(base || siteUrl()).replace(/\/+$/, '')
   return {
     logo: `${origin}/sih-logo.png`,
-    partners: `${origin}/email-logos.png`,
-    iconX: `${origin}/email-x.png`,
-    iconInstagram: `${origin}/email-ig.png`,
+    university: `${origin}/sanjivani-logo.png`,
   }
 }
 
-/** Hostname shown as the footer's website label, derived from FRONTEND_URL. */
+/** Hostname shown as the footer's website label. */
 export function brandWebsiteLabel(base) {
+  const url = base || siteUrl()
   try {
-    return new URL(base).host
+    return new URL(url).host
   } catch {
-    return String(base || '').replace(/^https?:\/\//, '').replace(/\/$/, '')
+    return String(url).replace(/^https?:\/\//, '').replace(/\/+$/, '')
   }
 }
 

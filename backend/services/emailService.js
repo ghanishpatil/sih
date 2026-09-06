@@ -11,10 +11,9 @@
 
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import { existsSync } from 'fs'
-import { BRAND, SOCIALS, EMAIL_COLORS, brandAssets, brandWebsiteLabel } from './brand.js'
+import { BRAND, EMAIL_COLORS, brandAssets, brandWebsiteLabel, siteUrl, brandLoginUrl } from './brand.js'
 
-// Directory holding email templates and attachments (e.g. the How-to-Register PDF).
+// Directory holding the email templates.
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'emailTemplates')
 
 let _smtpTransport = null
@@ -95,19 +94,10 @@ async function getSmtpTransport({ force = false } = {}) {
   return _smtpTransport
 }
 
-/**
- * Returns the configured frontend URL, falling back to a safe placeholder.
- * Prevents email links from rendering as "undefined/dashboard".
- */
-function getFrontendUrl() {
-  const url = process.env.FRONTEND_URL || ''
-  if (!url) {
-    console.warn('[Email] FRONTEND_URL is not set — email links will be broken.')
-    return 'https://sih.example.com'
-  }
-  // Strip trailing slash
-  return url.replace(/\/$/, '')
-}
+// All email links and image URLs come from `siteUrl()` in ./brand.js, which is
+// pinned to the public site (override with PUBLIC_SITE_URL). It is deliberately
+// NOT read from FRONTEND_URL — that variable also drives CORS and can lag behind
+// the live domain, which would send recipients to a stale host.
 
 /**
  * HTML entity escaping to prevent XSS in email templates.
@@ -136,7 +126,7 @@ function ctaButton(text, url) {
  * always correct and stays readable when a client blocks remote images.
  */
 function renderBrandedEmail({ title, bodyHtml }) {
-  const base = getFrontendUrl()
+  const base = siteUrl()
   const assets = brandAssets(base)
   const year = new Date().getFullYear()
   const c = EMAIL_COLORS
@@ -144,19 +134,20 @@ function renderBrandedEmail({ title, bodyHtml }) {
 <body style="margin:0;padding:0;background-color:${c.page};font-family:'Inter',Arial,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:${c.page};"><tr><td align="center" style="padding:20px 12px;">
 <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,0.08);">
-<tr><td align="center" style="padding:0;background:#ffffff;"><img src="${assets.partners}" alt="Partners" width="600" style="display:block;width:100%;max-width:600px;height:auto;"></td></tr>
-<tr><td align="center" style="padding:32px 20px 10px;background:${c.wash};"><img src="${assets.logo}" alt="${BRAND.name}" width="181" style="display:block;border:0;width:181px;max-width:100%;height:auto;margin:0 auto;"></td></tr>
-<tr><td align="center" style="padding:0 20px 8px;background:${c.wash};"><h2 style="margin:0;color:${c.primary};font-family:'Space Grotesk',Arial,sans-serif;font-size:24px;font-weight:700;line-height:1.25;">${BRAND.name}</h2></td></tr>
+<tr><td align="center" style="padding:30px 20px 12px;background:${c.wash};">
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>
+<td valign="middle" style="padding:0 12px;"><img src="${assets.university}" alt="${BRAND.university}" width="58" height="58" style="display:block;border:0;width:58px;height:58px;"></td>
+<td valign="middle" style="padding:0 12px;"><img src="${assets.logo}" alt="${BRAND.name}" width="150" style="display:block;border:0;width:150px;max-width:150px;height:auto;"></td>
+</tr></table>
+</td></tr>
+<tr><td align="center" style="padding:0 20px 28px;background:${c.wash};"><h2 style="margin:0;color:${c.primary};font-family:'Space Grotesk',Arial,sans-serif;font-size:22px;font-weight:700;line-height:1.3;">${BRAND.name}</h2><p style="margin:5px 0 0;color:${c.primary};font-size:13px;font-weight:600;">${BRAND.university}</p></td></tr>
 <tr><td style="padding:34px 40px 36px;background:#ffffff;">
 <h1 style="margin:0 0 18px;color:#0f172a;font-family:'Space Grotesk',Arial,sans-serif;font-size:25px;font-weight:700;line-height:1.3;">${title}</h1>
 <div style="color:#334155;font-size:15px;line-height:1.65;">${bodyHtml}</div>
 </td></tr>
-<tr><td align="center" style="padding:30px 40px 20px;background:${c.primary};">
-<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 16px;"><tr>
-<td style="padding:0 8px;"><a href="${SOCIALS.twitter}" target="_blank"><img src="${assets.iconX}" alt="X" width="30" style="display:block;border:0;width:30px;height:30px;"></a></td>
-<td style="padding:0 8px;"><a href="${SOCIALS.instagram}" target="_blank"><img src="${assets.iconInstagram}" alt="Instagram" width="30" style="display:block;border:0;width:30px;height:30px;"></a></td>
-</tr></table>
-<p style="margin:0 0 14px;font-size:16px;font-weight:700;color:#ffffff;">${BRAND.name}</p>
+<tr><td align="center" style="padding:26px 40px 20px;background:${c.primary};">
+<p style="margin:0 0 4px;font-size:16px;font-weight:700;color:#ffffff;">${BRAND.name}</p>
+<p style="margin:0 0 12px;font-size:13px;color:${c.muted};">${BRAND.university}</p>
 <p style="margin:0 0 6px;font-size:14px;"><a href="${base}" target="_blank" style="color:#ffffff;text-decoration:underline;font-weight:600;">${brandWebsiteLabel(base)}</a></p>
 <p style="margin:0;font-size:13px;color:${c.muted};">${BRAND.location}</p>
 </td></tr>
@@ -286,8 +277,8 @@ export async function sendAccountCreatedEmail({ to, name, eventName }) {
       <li style="margin-bottom:8px;"><strong>Pick a problem statement</strong><br><span style="color:#64748b;font-size:14px;">Browse the problem statements and select one to solve.</span></li>
       <li style="margin-bottom:8px;"><strong>Build and submit</strong><br><span style="color:#64748b;font-size:14px;">Upload your PPT and finalize before the deadline.</span></li>
     </ol>
-    ${ctaButton('Go to Dashboard', `${getFrontendUrl()}/dashboard`)}
-    <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Have questions? Reach the organizers at <a href="mailto:${BRAND.supportEmail}" style="color:${EMAIL_COLORS.primary};">${BRAND.supportEmail}</a>. Good luck! 🚀</p>
+    ${ctaButton('Go to Dashboard', `${siteUrl()}/dashboard`)}
+    <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Good luck! 🚀</p>
   `
   const htmlContent = renderBrandedEmail({ title: `Welcome to ${safeEventName}! 🎉`, bodyHtml })
   return sendEmail({ to, toName: name, subject, htmlContent })
@@ -309,7 +300,7 @@ export async function sendWelcomeEmail({ to, name, teamName, eventName }) {
       <li style="margin-bottom:6px;">Start working on your solution</li>
       <li style="margin-bottom:6px;">Submit before the deadline</li>
     </ul>
-    ${ctaButton('Go to Dashboard', `${getFrontendUrl()}/dashboard`)}
+    ${ctaButton('Go to Dashboard', `${siteUrl()}/dashboard`)}
     <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Best of luck! 🚀</p>
   `
   const htmlContent = renderBrandedEmail({ title: `Welcome to ${safeEventName}! 🎉`, bodyHtml })
@@ -333,7 +324,7 @@ export async function sendPaymentConfirmationEmail({ to, name, teamName, amount,
       <tr><td style="padding:12px 16px;color:#64748b;border-bottom:1px solid #eef2f6;">Payment ID</td><td style="padding:12px 16px;text-align:right;font-family:'Courier New',monospace;color:#0f172a;border-bottom:1px solid #eef2f6;">${safePaymentId}</td></tr>
       <tr><td style="padding:12px 16px;color:#64748b;">Date</td><td style="padding:12px 16px;text-align:right;color:#0f172a;">${new Date().toLocaleDateString()}</td></tr>
     </table>
-    ${ctaButton('Go to Dashboard', `${getFrontendUrl()}/dashboard`)}
+    ${ctaButton('Go to Dashboard', `${siteUrl()}/dashboard`)}
     <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Please keep this email for your records.</p>
   `
   const htmlContent = renderBrandedEmail({ title: 'Payment Confirmed ✅', bodyHtml })
@@ -359,7 +350,7 @@ export async function sendPaymentReminderEmail({ to, name, teamName, amount, cur
       <li style="margin-bottom:6px;">Team: <strong>${safeTeamName}</strong></li>
       <li style="margin-bottom:6px;">Deadline: <strong>${safeDeadline}</strong></li>
     </ul>
-    ${ctaButton('Complete Payment Now', `${getFrontendUrl()}/dashboard/registration`)}
+    ${ctaButton('Complete Payment Now', `${siteUrl()}/dashboard/registration`)}
     <p style="margin:20px 0 0;color:#64748b;font-size:14px;">If you've already paid, please ignore this email — it may take a few minutes to reflect.</p>
   `
   const htmlContent = renderBrandedEmail({ title: 'Payment Reminder ⏰', bodyHtml })
@@ -387,7 +378,7 @@ export async function sendSubmissionConfirmationEmail({ to, name, teamName, prob
       <li style="margin-bottom:6px;">Judges will evaluate your project</li>
       <li style="margin-bottom:6px;">Results will be announced soon</li>
     </ul>
-    ${ctaButton('View Submission', `${getFrontendUrl()}/dashboard/submission`)}
+    ${ctaButton('View Submission', `${siteUrl()}/dashboard/submission`)}
     <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Best of luck! 🚀</p>
   `
   const htmlContent = renderBrandedEmail({ title: 'Submission Received ✅', bodyHtml })
@@ -415,7 +406,7 @@ export async function sendSubmissionDeadlineReminderEmail({ to, name, teamName, 
       <li style="margin-bottom:6px;">Your presentation is complete</li>
       <li style="margin-bottom:6px;">You've finalized your submission</li>
     </ul>
-    ${ctaButton('Submit Now', `${getFrontendUrl()}/dashboard/submission`)}
+    ${ctaButton('Submit Now', `${siteUrl()}/dashboard/submission`)}
     <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Don't miss out — submit before the deadline. Good luck! 🚀</p>
   `
   const htmlContent = renderBrandedEmail({ title: 'Deadline Approaching ⏰', bodyHtml })
@@ -432,7 +423,7 @@ export async function sendTeamMemberJoinedEmail({ to, name, teamName, newMemberN
     <p style="margin:0 0 14px;"><strong>Hi ${safeName},</strong></p>
     <p style="margin:0 0 16px;"><strong>${safeNewMemberName}</strong> has joined your team <strong>${safeTeamName}</strong>.</p>
     <p style="margin:0 0 8px;">Your team is growing stronger — coordinate with all members for the best results.</p>
-    ${ctaButton('View Team', `${getFrontendUrl()}/dashboard/team`)}
+    ${ctaButton('View Team', `${siteUrl()}/dashboard/team`)}
   `
   const htmlContent = renderBrandedEmail({ title: 'New Team Member 👥', bodyHtml })
   return sendEmail({ to, toName: name, subject, htmlContent })
@@ -466,7 +457,7 @@ export async function sendAnnouncementEmail({ to, name, title, message, link }) 
   
   // Replace template placeholders. ASSET_BASE/SITE_LABEL keep the template's
   // images and footer link tied to FRONTEND_URL instead of a hardcoded host.
-  const base = getFrontendUrl()
+  const base = siteUrl()
   let htmlContent = htmlTemplate
     .replace(/{{ASSET_BASE}}/g, base)
     .replace(/{{SITE_LABEL}}/g, brandWebsiteLabel(base))
@@ -532,7 +523,7 @@ export async function sendEvaluationCompleteEmail({ to, name, teamName }) {
     <p style="margin:0 0 14px;"><strong>Hi ${safeName},</strong></p>
     <p style="margin:0 0 16px;">The evaluation for your team <strong>${safeTeamName}</strong> has been completed.</p>
     <p style="margin:0 0 8px;">Results will be announced soon — stay tuned!</p>
-    ${ctaButton('View Dashboard', `${getFrontendUrl()}/dashboard`)}
+    ${ctaButton('View Dashboard', `${siteUrl()}/dashboard`)}
     <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Thank you for participating! 🎉</p>
   `
   const htmlContent = renderBrandedEmail({ title: 'Evaluation Complete ✅', bodyHtml })
@@ -563,7 +554,7 @@ export async function sendQualifiedEmail({ to, name, teamName, eventName }) {
 
     <p style="margin:0 0 16px;">All other details, including the reporting time, event schedule, and travel guidance,
       will be shared with you shortly via <strong>email</strong> and <strong>WhatsApp</strong>. Please keep an eye on both.</p>
-    ${ctaButton('View Results', `${getFrontendUrl()}/results`)}
+    ${ctaButton('View Results', `${siteUrl()}/results`)}
     <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Warm regards,<br/>Team ${safeEvent}</p>
   `
   const htmlContent = renderBrandedEmail({ title: 'You\u2019re in the Grand Finale! 🎉', bodyHtml })
@@ -571,7 +562,8 @@ export async function sendQualifiedEmail({ to, name, teamName, eventName }) {
 }
 
 // 9. Account Credentials Email — sent when admin bulk-creates a leader account.
-// Contains their email, a temporary password, and the platform link.
+// Contains their email, their permanent password, and the login link. There is no
+// forced first-login password change (see leaderAccounts.js: mustChangePassword=false).
 // Uses the branded credentials.html template with an inline fallback.
 // Role-specific copy for the credentials email. `participant` keeps the exact
 // wording the team-leader email has always used, so that path is unchanged.
@@ -581,42 +573,36 @@ const CREDENTIALS_ROLE_COPY = {
     introLine: 'Your team has been registered successfully',
     subtitleLine: 'and manage your team, problem statement &amp; submissions.',
     fallbackIntro: 'as a team leader',
-    attachPdf: true,
   },
   judge: {
     defaultName: 'Jury Member',
     introLine: 'You have been added as a Jury Member',
     subtitleLine: 'and review your assigned teams &amp; submit evaluations.',
     fallbackIntro: 'as a jury member',
-    attachPdf: false,
   },
   mentor: {
     defaultName: 'Mentor',
     introLine: 'You have been added as a Mentor',
     subtitleLine: 'and guide your assigned teams via mentor chat.',
     fallbackIntro: 'as a mentor',
-    attachPdf: false,
   },
   viewer: {
     defaultName: 'Observer',
     introLine: 'You have been given Observer (read-only) access',
     subtitleLine: 'to view teams, submissions, results &amp; reports (read-only).',
     fallbackIntro: 'as an observer (read-only)',
-    attachPdf: false,
   },
   registration_desk: {
     defaultName: 'Registration Desk',
     introLine: 'You have been added to the Registration Desk',
     subtitleLine: 'and check in teams for your assigned domains at the venue.',
     fallbackIntro: 'as registration desk staff',
-    attachPdf: false,
   },
   registration_desk_incharge: {
     defaultName: 'Registration Desk Incharge',
     introLine: 'You have been added as Registration Desk Incharge',
     subtitleLine: 'and oversee all desks, domains &amp; live attendance analytics.',
     fallbackIntro: 'as the registration desk incharge',
-    attachPdf: false,
   },
 }
 
@@ -626,16 +612,11 @@ export async function sendCredentialsEmail({ to, name, tempPassword, eventName, 
   const safeEmail = escapeHtml(to)
   const safePassword = escapeHtml(String(tempPassword))
   const safeEventName = escapeHtml(eventName || BRAND.name)
-  const loginUrl = `${getFrontendUrl()}/auth`
+  const loginUrl = brandLoginUrl()
   const subject = `Your ${safeEventName} login credentials`
 
-  // Attach the "How to Register" PDF guide only on the team-leader credentials
-  // email (judges/mentors don't register teams).
-  const pdfName = 'How-To-Register.pdf'
-  const pdfPath = join(TEMPLATES_DIR, pdfName)
-  const attachments = (copy.attachPdf && existsSync(pdfPath))
-    ? [{ filename: pdfName, path: pdfPath }]
-    : []
+  // No attachments: the "How to Register" PDF guide was retired.
+  const attachments = []
 
   // Try the branded template file first
   try {
@@ -643,8 +624,8 @@ export async function sendCredentialsEmail({ to, name, tempPassword, eventName, 
     const templatePath = join(TEMPLATES_DIR, 'credentials.html')
     const tpl = await fs.readFile(templatePath, 'utf-8')
     const htmlContent = tpl
-      .replace(/{{ASSET_BASE}}/g, getFrontendUrl())
-      .replace(/{{SITE_LABEL}}/g, brandWebsiteLabel(getFrontendUrl()))
+      .replace(/{{ASSET_BASE}}/g, siteUrl())
+      .replace(/{{SITE_LABEL}}/g, brandWebsiteLabel())
       .replace(/{{EVENT_NAME}}/g, safeEventName)
       .replace(/{{NAME}}/g, safeName)
       .replace(/{{EMAIL}}/g, safeEmail)
@@ -663,13 +644,13 @@ export async function sendCredentialsEmail({ to, name, tempPassword, eventName, 
     <p style="margin:0 0 16px;">An account has been created for you ${copy.fallbackIntro} on the ${safeEventName} platform. Use the credentials below to sign in:</p>
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:8px;margin:0 0 16px;">
       <tr><td style="padding:14px 16px;border-bottom:1px solid #eef2f6;"><span style="display:block;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Email</span><strong style="font-family:'Courier New',monospace;color:#0f172a;">${safeEmail}</strong></td></tr>
-      <tr><td style="padding:14px 16px;"><span style="display:block;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Temporary Password</span><strong style="font-family:'Courier New',monospace;color:#0f172a;">${safePassword}</strong></td></tr>
+      <tr><td style="padding:14px 16px;"><span style="display:block;color:#64748b;font-size:12px;text-transform:uppercase;letter-spacing:0.5px;">Password</span><strong style="font-family:'Courier New',monospace;color:#0f172a;">${safePassword}</strong></td></tr>
     </table>
-    <div style="background:#fef3c7;border-left:4px solid #f59e0b;padding:12px 16px;border-radius:6px;margin:0 0 16px;color:#92400e;font-size:14px;">
-      🔒 For your security, you'll be asked to <strong>set a new password</strong> (verified by a one-time code sent to this email) the first time you log in.
+    <div style="background:#e6f4ff;border-left:4px solid ${EMAIL_COLORS.primary};padding:12px 16px;border-radius:6px;margin:0 0 16px;color:#124a6e;font-size:14px;">
+      🔒 This is your <strong>permanent password</strong> — you do not need to reset or change it. Keep this email safe and use these credentials every time you sign in.
     </div>
     ${ctaButton('Log in to the Platform', loginUrl)}
-    ${copy.attachPdf ? '<p style="margin:20px 0 0;color:#64748b;font-size:14px;">📎 A step-by-step <strong>“How to Register”</strong> guide is attached to this email (PDF).</p>' : ''}
+    <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Log in at <a href="${loginUrl}" style="color:${EMAIL_COLORS.primary};">${brandWebsiteLabel()}/auth</a>.</p>
   `
   const htmlContent = renderBrandedEmail({ title: `Your ${safeEventName} Access`, bodyHtml })
   return sendEmail({ to, toName: name, subject, htmlContent, attachments })
@@ -680,8 +661,8 @@ export async function sendOtpEmail({ to, name, otp, eventName }) {
   const safeName = escapeHtml(name || 'there')
   const safeOtp = escapeHtml(String(otp))
   const safeEventName = escapeHtml(eventName || BRAND.name)
-  const base = getFrontendUrl()
-  const logoUrl = brandAssets(base).logo
+  const base = siteUrl()
+  const assets = brandAssets(base)
   const year = new Date().getFullYear()
   const subject = `Your verification code: ${safeOtp}`
   const htmlContent = `
@@ -696,11 +677,14 @@ export async function sendOtpEmail({ to, name, otp, eventName }) {
         <tr>
           <td align="center" style="padding:24px 12px;">
             <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#ffffff;border-radius:12px;overflow:hidden;">
-              <!-- Header: brand mark + wordmark -->
+              <!-- Header: Sanjivani University mark + Smart India Hackathon wordmark -->
               <tr>
-                <td align="center" style="background-color:#e6f4ff;padding:36px 20px 8px;">
-                  <img src="${logoUrl}" alt="${BRAND.name}" width="181" style="display:block;border:0;width:181px;max-width:100%;height:auto;margin:0 auto 10px;">
-                  <p style="margin:0;color:#185983;font-family:'Space Grotesk','Inter',Arial,sans-serif;font-size:18px;font-weight:700;">${BRAND.name}</p>
+                <td align="center" style="background-color:#e6f4ff;padding:34px 20px 8px;">
+                  <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center"><tr>
+                    <td valign="middle" style="padding:0 11px;"><img src="${assets.university}" alt="${BRAND.university}" width="56" height="56" style="display:block;border:0;width:56px;height:56px;"></td>
+                    <td valign="middle" style="padding:0 11px;"><img src="${assets.logo}" alt="${BRAND.name}" width="148" style="display:block;border:0;width:148px;max-width:148px;height:auto;"></td>
+                  </tr></table>
+                  <p style="margin:12px 0 0;color:#185983;font-family:'Space Grotesk','Inter',Arial,sans-serif;font-size:18px;font-weight:700;">${BRAND.name}</p>
                 </td>
               </tr>
               <tr>

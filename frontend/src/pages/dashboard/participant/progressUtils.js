@@ -48,12 +48,16 @@ export function buildParticipantSteps({
   ]
 
   // Single submission step — gated by the event schedule (no phases).
-  steps.push({
-    id: 'submission',
-    title: 'Submission',
-    description: 'Artifacts + finalize',
-    done: Boolean(team?.submissionLocked || submission?.finalizedAt),
-  })
+  // Omitted entirely when an admin has switched the Submissions feature off, so
+  // the journey never references a feature participants cannot see.
+  if (eventCfg?.submissionsEnabled !== false) {
+    steps.push({
+      id: 'submission',
+      title: 'Submission',
+      description: 'Artifacts + finalize',
+      done: Boolean(team?.submissionLocked || submission?.finalizedAt),
+    })
+  }
 
   const completed = steps.filter((s) => s.done).length
   const activeIndex = steps.findIndex((s) => !s.done && !s.skipped)

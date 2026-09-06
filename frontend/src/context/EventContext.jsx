@@ -77,6 +77,13 @@ export function EventProvider({ children }) {
           submissionsOpen: typeof data.submissionsOpen === 'boolean' ? data.submissionsOpen : prev?.submissionsOpen ?? false,
           evaluationsOpen: typeof data.evaluationsOpen === 'boolean' ? data.evaluationsOpen : prev?.evaluationsOpen ?? false,
           resultsPublished: typeof data.resultsPublished === 'boolean' ? data.resultsPublished : prev?.resultsPublished ?? false,
+          // Feature switches. These MUST be listed here — this handler rebuilds
+          // eventCfg from scratch, so any field omitted is dropped on the first
+          // snapshot and the feature would flicker on and then hide itself.
+          matchmakingEnabled: typeof data.matchmakingEnabled === 'boolean' ? data.matchmakingEnabled : prev?.matchmakingEnabled ?? false,
+          submissionsEnabled: data.submissionsEnabled !== false,
+          challengesEnabled: data.challengesEnabled === true,
+          finalistsOnly: typeof data.finalistsOnly === 'boolean' ? data.finalistsOnly : prev?.finalistsOnly ?? false,
           entryFeeEnabled: typeof data.entryFeeEnabled === 'boolean' ? data.entryFeeEnabled : prev?.entryFeeEnabled,
           entryFeeAmount: typeof data.entryFeeAmount === 'number' ? data.entryFeeAmount : prev?.entryFeeAmount,
           currency: data.currency || prev?.currency || 'INR',

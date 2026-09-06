@@ -88,7 +88,6 @@ export function AdminResultsPage() {
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [collegeFilter, setCollegeFilter] = useState('all')
-  const [locationFilter, setLocationFilter] = useState('all')
   const [expanded, setExpanded] = useState(null) // teamId whose breakdown is open
 
   const load = useCallback(async () => {
@@ -109,7 +108,7 @@ export function AdminResultsPage() {
       setPsMap(m)
       const cm = new Map()
       for (const t of (Array.isArray(tc?.teams) ? tc.teams : [])) {
-        cm.set(t.teamId, { college: t.college || '', collegeLocation: t.collegeLocation || '' })
+        cm.set(t.teamId, { college: t.college || '', prn: t.prn || '' })
       }
       setCollegeByTeam(cm)
     } catch {
@@ -164,7 +163,7 @@ export function AdminResultsPage() {
           domain: ps?.theme || ps?.domain || '',
           track: ps?.category || '',
           college: cl.college || '',
-          collegeLocation: cl.collegeLocation || '',
+          prn: cl.prn || '',
           judges: evaluations.length,
           judgeNames: evaluations.map((x) => x.judgeLabel).join(', '),
           evaluations,
@@ -177,15 +176,12 @@ export function AdminResultsPage() {
     return list
   }, [evals, teams, psMap, judgeById, collegeByTeam])
 
-  // Distinct college & location values (sorted) for the filter dropdowns.
+  // Distinct college values (sorted) for the filter dropdown.
   const collegeOptions = useMemo(
     () => Array.from(new Set(rows.map((r) => r.college).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [rows],
   )
-  const locationOptions = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.collegeLocation).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
-    [rows],
-  )
+
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -193,11 +189,10 @@ export function AdminResultsPage() {
       if (statusFilter === 'unset' && r.juryStatus) return false
       if (statusFilter !== 'all' && statusFilter !== 'unset' && r.juryStatus !== statusFilter) return false
       if (collegeFilter !== 'all' && r.college !== collegeFilter) return false
-      if (locationFilter !== 'all' && r.collegeLocation !== locationFilter) return false
       if (!q) return true
-      return `${r.name} ${r.code} ${r.psTitle} ${r.judgeNames} ${r.college} ${r.collegeLocation}`.toLowerCase().includes(q)
+      return `${r.name} ${r.code} ${r.psTitle} ${r.judgeNames} ${r.college} ${r.prn}`.toLowerCase().includes(q)
     })
-  }, [rows, search, statusFilter, collegeFilter, locationFilter])
+  }, [rows, search, statusFilter, collegeFilter])
 
   const counts = useMemo(() => ({
     qualified: rows.filter((r) => r.juryStatus === 'qualified').length,
@@ -215,7 +210,7 @@ export function AdminResultsPage() {
       { header: 'Domain', accessor: (r) => r.domain },
       { header: 'Track', accessor: (r) => r.track },
       { header: 'College', accessor: (r) => r.college },
-      { header: 'Location', accessor: (r) => r.collegeLocation },
+      { header: 'Leader PRN', accessor: (r) => r.prn },
       { header: 'Avg %', accessor: (r) => r.avg },
       { header: 'Judges', accessor: (r) => r.judges },
       { header: 'Judge(s)', accessor: (r) => r.judgeNames },
@@ -274,7 +269,7 @@ export function AdminResultsPage() {
         { header: 'Member Email', accessor: (x) => x.m?.email || '' },
         { header: 'Member Phone', accessor: (x) => x.m?.phone || '' },
         { header: 'College', accessor: (x) => x.m?.institute || x.team.college || '' },
-        { header: 'College Location', accessor: (x) => x.m?.collegeLocation || x.team.collegeLocation || '' },
+        { header: 'PRN', accessor: (x) => x.m?.prn || '' },
         { header: 'Year of Study', accessor: (x) => x.m?.yearOfStudy || '' },
         { header: 'Department', accessor: (x) => x.m?.department || '' },
       ])
@@ -438,7 +433,7 @@ export function AdminResultsPage() {
           </div>
         </div>
 
-        {/* College + Location filters */}
+        {/* College filter */}
         <div className="flex flex-col gap-3 sm:flex-row">
           <label className="flex-1 text-xs font-medium text-ink-500">
             College
@@ -451,21 +446,10 @@ export function AdminResultsPage() {
               {collegeOptions.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </label>
-          <label className="flex-1 text-xs font-medium text-ink-500">
-            Location
-            <select
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 py-2 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-            >
-              <option value="all">All locations ({locationOptions.length})</option>
-              {locationOptions.map((l) => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </label>
-          {(collegeFilter !== 'all' || locationFilter !== 'all') ? (
+          {collegeFilter !== 'all' ? (
             <button
               type="button"
-              onClick={() => { setCollegeFilter('all'); setLocationFilter('all') }}
+              onClick={() => setCollegeFilter('all')}
               className="self-end rounded-lg bg-[rgb(var(--surface-muted))] px-3 py-2 text-sm font-medium text-ink-600 hover:bg-[rgb(var(--border))]"
             >
               Clear
@@ -502,9 +486,9 @@ export function AdminResultsPage() {
                         <td className="px-3 py-2">
                           <div className="font-medium text-ink-900">{r.name}</div>
                           <div className="font-mono text-[10px] text-ink-400">{r.code}</div>
-                          {(r.college || r.collegeLocation) ? (
+                          {(r.college || r.prn) ? (
                             <div className="mt-0.5 text-[10px] text-ink-500">
-                              {r.college}{r.college && r.collegeLocation ? ' · ' : ''}{r.collegeLocation}
+                              {r.college}{r.college && r.prn ? ' · PRN ' : ''}{r.prn}
                             </div>
                           ) : null}
                         </td>

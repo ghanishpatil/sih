@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/Skeleton.jsx'
 import { SnitchLoader } from '@/components/ui/SnitchLoader.jsx'
 import { PaymentSuccessAnimation } from '@/components/ui/PaymentSuccessAnimation.jsx'
 import { TeamRegistrationForm } from '@/components/participant/TeamRegistrationForm.jsx'
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog.jsx'
 import { loadRazorpayScript } from '@/utils/loadRazorpay.js'
 import { isRegistrationComplete } from '@/utils/teamRegistrationDisplay.js'
 import { formatLifecyclePhase } from '@/utils/eventLifecycleDisplay.js'
@@ -69,6 +70,9 @@ export function ParticipantRegistrationPage() {
   const [roster, setRoster] = useState(null)
   const [memberRegistrations, setMemberRegistrations] = useState([])
   const [editingMembers, setEditingMembers] = useState(false)
+  // Pre-registration check: 'now' | 'later' | null. Registration locks member
+  // details, so the leader re-verifies the roster before we commit.
+  const [confirmMode, setConfirmMode] = useState(null)
 
   // Load team roster
   useEffect(() => {
@@ -504,7 +508,7 @@ export function ParticipantRegistrationPage() {
                   </div>
                 </div>
                 <p className="mt-2 text-xs text-ink-500">
-                  The team leader fills in details for every member (name, email, mobile, college, location, year, department) before the team can proceed.
+                  The team leader fills in details for every member (name, email, mobile, PRN, year, department) before the team can proceed.
                 </p>
                 {allMembersSubmitted && isLeader && !registered && !awaitingPayment ? (
                   <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -534,8 +538,7 @@ export function ParticipantRegistrationPage() {
                     fullName: r.name || '',
                     email: r.email || '',
                     phone: r.phone || '',
-                    college: r.institute || '',
-                    collegeLocation: r.collegeLocation || '',
+                    prn: r.prn || '',
                     yearOfStudy: r.yearOfStudy || '',
                     department: r.department || '',
                     order: typeof r.order === 'number' ? r.order : 0,
@@ -583,7 +586,7 @@ export function ParticipantRegistrationPage() {
                           <Button
                             className="gap-2"
                             disabled={busy || windowClosed || Boolean(registrationBlockedReason)}
-                            onClick={() => void registerEvent()}
+                            onClick={() => setConfirmMode('now')}
                           >
                             Register & Pay Now
                             <CreditCard className="h-4 w-4 opacity-90" />
@@ -592,7 +595,7 @@ export function ParticipantRegistrationPage() {
                             variant="secondary"
                             className="gap-2"
                             disabled={busy || windowClosed || Boolean(registrationBlockedReason)}
-                            onClick={() => void registerEventPayLater()}
+                            onClick={() => setConfirmMode('later')}
                           >
                             Register & Pay Later
                             <ArrowRight className="h-4 w-4" />
@@ -602,7 +605,7 @@ export function ParticipantRegistrationPage() {
                         <Button
                           className="w-full gap-2 sm:w-auto"
                           disabled={busy || windowClosed || Boolean(registrationBlockedReason)}
-                          onClick={() => void registerEvent()}
+                          onClick={() => setConfirmMode('now')}
                         >
                           Confirm registration
                           <ArrowRight className="h-4 w-4" />
@@ -692,6 +695,47 @@ export function ParticipantRegistrationPage() {
           </>
         )}
       </motion.div>
+
+      {/* Final check before registering — member details lock after this. */}
+      <ConfirmDialog
+        open={Boolean(confirmMode)}
+        tone="warn"
+        title="Have all team member details been filled in?"
+        description="Please check the roster once. After you confirm, team and member details are locked and can no longer be edited."
+        confirmLabel={confirmMode === 'later' ? 'Yes, register & pay later' : 'Yes, confirm registration'}
+        cancelLabel="Let me check again"
+        busy={busy}
+        onCancel={() => setConfirmMode(null)}
+        onConfirm={() => {
+          const mode = confirmMode
+          setConfirmMode(null)
+          if (mode === 'later') void registerEventPayLater()
+          else void registerEvent()
+        }}
+      >
+        <div className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--surface-muted))]/50 px-3 py-2 text-sm">
+          <p className="font-semibold text-ink-900">{team?.name || 'Your team'}</p>
+          <p className="mt-0.5 text-xs text-ink-500">
+            {submittedMembers} of {totalMembers} member{totalMembers === 1 ? '' : 's'} submitted
+          </p>
+        </div>
+        <ul className="max-h-56 space-y-2 overflow-y-auto">
+          {memberRegistrations
+            .slice()
+            .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+            .map((m) => (
+              <li key={m.id} className="rounded-lg border border-[rgb(var(--border))] px-3 py-2">
+                <p className="text-sm font-medium text-ink-900">
+                  {m.isLeader ? 'Team Leader' : 'Member'}: {m.name || '—'}
+                </p>
+                <p className="mt-0.5 text-xs text-ink-600">
+                  PRN {m.prn || '—'} · {m.department || '—'} · {m.yearOfStudy || '—'}
+                </p>
+                <p className="text-xs text-ink-500">{m.email || '—'} · {m.phone || '—'}</p>
+              </li>
+            ))}
+        </ul>
+      </ConfirmDialog>
 
       {showSnitchLoader && <SnitchLoader message="Opening payment gateway..." />}
       <PaymentSuccessAnimation 

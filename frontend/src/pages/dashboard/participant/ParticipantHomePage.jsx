@@ -109,6 +109,8 @@ export function ParticipantHomePage() {
   const feeResolved = !feeRequired || paySt === 'paid' || paySt === 'waived' || paySt === 'not_required'
   const { steps, completed } = buildParticipantSteps({ eventCfg, team, submission, feeResolved, problemChosen: Boolean(team?.problemStatementId) })
   const subProgress = submissionCompleteness(submission)
+  // Admin-controlled feature switch — hides the Submission card and CTA.
+  const submissionsEnabled = eventCfg?.submissionsEnabled !== false
   const progressPct = steps.length > 0 ? Math.round((completed / steps.length) * 100) : 0
   const regComplete = team && feeResolved && team.eventRegistered
   const regPending = team && feeRequired && paySt === 'pending' && (team.registrationStatus === 'pending' || team.registrationRequestedAt)
@@ -121,7 +123,7 @@ export function ParticipantHomePage() {
         ? { label: 'Complete Payment', to: '/dashboard/registration', icon: CreditCard }
         : !team.problemStatementId
           ? { label: 'Select Problem Statement', to: '/dashboard/problems', icon: Target }
-          : !team.submissionLocked
+          : (submissionsEnabled && !team.submissionLocked)
             ? { label: 'Upload Submission', to: '/dashboard/submission', icon: FileUp }
             : null
 
@@ -291,7 +293,8 @@ export function ParticipantHomePage() {
           </Link>
         </motion.div>
 
-        {/* Submission */}
+        {/* Submission — hidden when an admin turns the feature off */}
+        {submissionsEnabled ? (
         <motion.div variants={fadeUp}>
           <Link to="/dashboard/submission" className="group block h-full">
             <Card hover className="relative h-full overflow-hidden">
@@ -314,6 +317,7 @@ export function ParticipantHomePage() {
             </Card>
           </Link>
         </motion.div>
+        ) : null}
       </div>
 
       {/* ━━ Bottom Row: Announcements + Chat + Quick Actions ━━━━━ */}

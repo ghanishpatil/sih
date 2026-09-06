@@ -234,7 +234,11 @@ export function ParticipantProgressPage() {
         </motion.div>
       ) : (
         <motion.div variants={fadeUp}>
-          <NextStepCard team={team} regPending={feeRequired && paySt === 'pending'} />
+          <NextStepCard
+            team={team}
+            regPending={feeRequired && paySt === 'pending'}
+            submissionsEnabled={eventCfg?.submissionsEnabled !== false}
+          />
         </motion.div>
       )}
     </motion.div>
@@ -242,7 +246,7 @@ export function ParticipantProgressPage() {
 }
 
 /** Suggests the next concrete action based on team state. */
-function NextStepCard({ team, regPending }) {
+function NextStepCard({ team, regPending, submissionsEnabled = true }) {
   const next = !team
     ? { label: 'Create Your Team', to: '/dashboard/team', icon: Users, hint: 'Teams have 1–4 members.' }
     : !team.eventRegistered && !regPending
@@ -251,7 +255,7 @@ function NextStepCard({ team, regPending }) {
         ? { label: 'Complete Payment', to: '/dashboard/registration', icon: CreditCard, hint: 'Finish your entry fee.' }
         : !team.problemStatementId
           ? { label: 'Select a Problem Statement', to: '/dashboard/problems', icon: Target, hint: 'Pick your challenge.' }
-          : !team.submissionLocked
+          : (submissionsEnabled && !team.submissionLocked)
             ? { label: 'Work on Your Submission', to: '/dashboard/submission', icon: FileUp, hint: 'Upload your artifacts.' }
             : null
 

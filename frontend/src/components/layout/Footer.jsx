@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
-import { Mail, MapPin, Phone, Github, Twitter, Linkedin, Instagram, ExternalLink, MessageCircle } from 'lucide-react'
+import { Github, Twitter, Linkedin, Instagram, ExternalLink, MessageCircle } from 'lucide-react'
 import { BrandLogo } from '@/components/ui/BrandLogo.jsx'
-import { APP, COORDINATORS, SOCIAL_LINKS } from '@/utils/constants.js'
+import { APP, SOCIAL_LINKS } from '@/utils/constants.js'
 
 const footerLinks = {
   platform: [
@@ -119,53 +119,6 @@ export function Footer() {
             </ul>
           </div>
 
-          {/* Contact column */}
-          <div className="lg:col-span-3">
-            <p className="font-display text-sm font-semibold uppercase tracking-wider text-ink-300">
-              Contact
-            </p>
-            <ul className="mt-4 space-y-3">
-              <li className="flex gap-2.5 text-sm text-ink-400">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
-                <span>{APP.venue}</span>
-              </li>
-              <li className="flex gap-2.5 text-sm text-ink-400">
-                <Mail className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
-                <a className="transition-colors hover:text-brand-400" href={`mailto:${APP.contactEmail}`}>
-                  {APP.contactEmail}
-                </a>
-              </li>
-              {COORDINATORS.coordinators.map((c) => (
-                <li key={c.email} className="flex gap-2.5 text-sm text-ink-400">
-                  <Mail className="mt-0.5 h-4 w-4 shrink-0 text-brand-500" />
-                  <div className="min-w-0">
-                    <a
-                      className="font-medium text-ink-300 transition-colors hover:text-brand-400"
-                      href={`mailto:${c.email}`}
-                    >
-                      {c.name}
-                    </a>
-                    <span className="block break-all text-xs text-ink-500">{c.role} · {c.email}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-
-            {/* Student leaders */}
-            <p className="mt-6 font-display text-sm font-semibold uppercase tracking-wider text-ink-300">
-              Student Leaders
-            </p>
-            <ul className="mt-3 space-y-2">
-              {COORDINATORS.leaders.map((l) => (
-                <li key={l.phone} className="flex items-center gap-2.5 text-sm text-ink-400">
-                  <Phone className="h-3.5 w-3.5 shrink-0 text-brand-500" />
-                  <a className="transition-colors hover:text-brand-400" href={`tel:+91${l.phone}`}>
-                    <span className="text-ink-300">{l.name}</span>{l.role ? <span className="text-ink-500"> ({l.role})</span> : null} · {l.phone}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          </div>
         </div>
       </div>
 
@@ -175,11 +128,7 @@ export function Footer() {
           <p className="text-xs text-ink-500">
             © {new Date().getFullYear()} {APP.university}. Internal qualifier for the {APP.parentEvent}.
           </p>
-          <div className="flex gap-4 text-xs text-ink-500">
-            <a className="transition-colors hover:text-ink-300" href={`mailto:${APP.contactEmail}`}>
-              {APP.contactEmail}
-            </a>
-          </div>
+
         </div>
       </div>
     </footer>

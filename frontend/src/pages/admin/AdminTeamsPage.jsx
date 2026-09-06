@@ -222,7 +222,7 @@ export function AdminTeamsPage() {
   }, [teams])
 
   // Export ONLY qualified teams, with just the TEAM LEADER's details:
-  // team name, leader name, mobile, email, college, city (location), year, etc.
+  // team name, leader name, mobile, email, college, PRN, year, etc.
   // The leader lives in each team's member registrations (isLeader === true).
   const exportQualifiedLeaders = useCallback(async () => {
     const qualified = teams.filter((t) => t.juryStatus === 'qualified')
@@ -256,7 +256,7 @@ export function AdminTeamsPage() {
         { header: 'Leader Mobile', accessor: (x) => x.leader?.phone || '' },
         { header: 'Leader Email', accessor: (x) => x.leader?.email || '' },
         { header: 'College', accessor: (x) => x.leader?.institute || '' },
-        { header: 'City / Location', accessor: (x) => x.leader?.collegeLocation || '' },
+        { header: 'Leader PRN', accessor: (x) => x.leader?.prn || '' },
         { header: 'Year of Study', accessor: (x) => x.leader?.yearOfStudy || '' },
         { header: 'Department', accessor: (x) => x.leader?.department || '' },
         { header: 'Problem Statement', accessor: (x) => x.team.problemStatementId || '' },
@@ -659,7 +659,7 @@ export function AdminTeamsPage() {
                           {m.email ? <span className="truncate">✉ {m.email}</span> : null}
                           {m.phone ? <span>☎ {m.phone}</span> : null}
                           {m.institute ? <span className="truncate">🏫 {m.institute}</span> : null}
-                          {m.collegeLocation ? <span className="truncate">📍 {m.collegeLocation}</span> : null}
+                          {m.prn ? <span className="truncate">🆔 PRN {m.prn}</span> : null}
                           {m.yearOfStudy ? <span>🎓 {m.yearOfStudy}</span> : null}
                           {m.department ? <span className="truncate">🏷 {m.department}</span> : null}
                         </div>

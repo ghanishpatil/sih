@@ -625,7 +625,7 @@ function TeamTableRow({ team, expanded, details, selected, onSelectToggle, onTog
                       <tr>
                         <th className="pb-2 text-left text-xs font-medium text-ink-600">Name</th>
                         <th className="pb-2 text-left text-xs font-medium text-ink-600">College</th>
-                        <th className="pb-2 text-left text-xs font-medium text-ink-600">Location</th>
+                        <th className="pb-2 text-left text-xs font-medium text-ink-600">PRN</th>
                         <th className="pb-2 text-left text-xs font-medium text-ink-600">Year</th>
                         <th className="pb-2 text-left text-xs font-medium text-ink-600">Department</th>
                         <th className="pb-2 text-left text-xs font-medium text-ink-600">Email</th>
@@ -685,9 +685,9 @@ function MemberTableRow({ member, onUpdateStatus }) {
         <div className="text-sm text-ink-700">{member.institute || '—'}</div>
       </td>
 
-      {/* Location */}
+      {/* PRN */}
       <td className="py-3 pr-4">
-        <div className="text-sm text-ink-700">{member.collegeLocation || '—'}</div>
+        <div className="text-sm text-ink-700">{member.prn || '—'}</div>
       </td>
 
       {/* Year */}

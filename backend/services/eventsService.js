@@ -131,6 +131,9 @@ export async function getActiveEventConfig() {
       evaluationsOpen: false,
       resultsPublished: false,
       matchmakingEnabled: false,
+      // Participant feature switches (admin-controlled visibility).
+      submissionsEnabled: true,
+      challengesEnabled: false,
       entryFeeEnabled: DEFAULT_EVENT_CONFIG.entryFeeEnabled,
       entryFeeAmount: DEFAULT_EVENT_CONFIG.entryFeeAmount,
       currency: DEFAULT_EVENT_CONFIG.currency,
@@ -152,6 +155,11 @@ export async function getActiveEventConfig() {
     evaluationsOpen: typeof event.evaluationsOpen === 'boolean' ? event.evaluationsOpen : false,
     resultsPublished: typeof event.resultsPublished === 'boolean' ? event.resultsPublished : false,
     matchmakingEnabled: typeof event.matchmakingEnabled === 'boolean' ? event.matchmakingEnabled : false,
+    // Participant FEATURE switch for Submissions — distinct from `submissionsOpen`,
+    // which is the schedule gate. When this is false the Submission page, its nav
+    // entry and its progress step disappear entirely. Defaults ON so existing
+    // events keep working.
+    submissionsEnabled: event.submissionsEnabled !== false,
     entryFeeEnabled: typeof event.entryFeeEnabled === 'boolean' ? event.entryFeeEnabled : DEFAULT_EVENT_CONFIG.entryFeeEnabled,
     entryFeeAmount: typeof event.entryFeeAmount === 'number' ? event.entryFeeAmount : DEFAULT_EVENT_CONFIG.entryFeeAmount,
     currency: typeof event.currency === 'string' ? event.currency : DEFAULT_EVENT_CONFIG.currency,

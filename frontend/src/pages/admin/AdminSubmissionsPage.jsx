@@ -47,7 +47,6 @@ export function AdminSubmissionsPage() {
   const [problems, setProblems] = useState([])
   const [collegeByTeam, setCollegeByTeam] = useState(new Map())
   const [collegeFilter, setCollegeFilter] = useState('all')
-  const [locationFilter, setLocationFilter] = useState('all')
   const [domainFilter, setDomainFilter] = useState('all')
   const [juryFilter, setJuryFilter] = useState('all')
   const [loading, setLoading] = useState(true)
@@ -69,7 +68,7 @@ export function AdminSubmissionsPage() {
       setProblems(Array.isArray(psRows) ? psRows : [])
       const cm = new Map()
       for (const row of (Array.isArray(tc?.teams) ? tc.teams : [])) {
-        cm.set(row.teamId, { college: row.college || '', collegeLocation: row.collegeLocation || '' })
+        cm.set(row.teamId, { college: row.college || '', prn: row.prn || '' })
       }
       setCollegeByTeam(cm)
     } catch {
@@ -110,7 +109,7 @@ export function AdminSubmissionsPage() {
         problemStatementId: pid,
         domain: (pid && psDomain.get(pid)) || '',
         college: cl.college || '',
-        collegeLocation: cl.collegeLocation || '',
+        prn: cl.prn || '',
         juryStatus: team?.juryStatus || '',
         submissionLocked,
         effectiveStatus,
@@ -123,10 +122,6 @@ export function AdminSubmissionsPage() {
     () => Array.from(new Set(enrichedSubs.map((s) => s.college).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [enrichedSubs],
   )
-  const locationOptions = useMemo(
-    () => Array.from(new Set(enrichedSubs.map((s) => s.collegeLocation).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
-    [enrichedSubs],
-  )
   const domainOptions = useMemo(
     () => Array.from(new Set(enrichedSubs.map((s) => s.domain).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [enrichedSubs],
@@ -135,14 +130,13 @@ export function AdminSubmissionsPage() {
     const q = String(globalFilter || '').trim().toLowerCase()
     return enrichedSubs.filter((s) => {
       if (collegeFilter !== 'all' && s.college !== collegeFilter) return false
-      if (locationFilter !== 'all' && s.collegeLocation !== locationFilter) return false
       if (domainFilter !== 'all' && s.domain !== domainFilter) return false
       if (juryFilter === 'unset' && s.juryStatus) return false
       if (juryFilter !== 'all' && juryFilter !== 'unset' && s.juryStatus !== juryFilter) return false
       if (q && !`${s.teamName} ${s.teamId} ${s.effectiveStatus}`.toLowerCase().includes(q)) return false
       return true
     })
-  }, [enrichedSubs, collegeFilter, locationFilter, domainFilter, juryFilter, globalFilter])
+  }, [enrichedSubs, collegeFilter, domainFilter, juryFilter, globalFilter])
 
   const columns = useMemo(
     () => [
@@ -156,14 +150,14 @@ export function AdminSubmissionsPage() {
       }),
       col.display({
         id: 'college',
-        header: 'College / Location / Domain',
+        header: 'College / PRN / Domain',
         cell: ({ row }) => {
           const r = row.original
-          if (!r.college && !r.collegeLocation && !r.domain) return <span className="text-xs text-ink-400">—</span>
+          if (!r.college && !r.domain) return <span className="text-xs text-ink-400">—</span>
           return (
             <div className="text-xs text-ink-600">
               <div className="text-ink-800">{r.college || '—'}</div>
-              {r.collegeLocation ? <div className="text-ink-400">{r.collegeLocation}</div> : null}
+              {r.prn ? <div className="text-ink-400">PRN {r.prn}</div> : null}
               {r.domain ? <Badge tone="neutral" className="mt-0.5 text-[9px]">{r.domain}</Badge> : null}
             </div>
           )
@@ -252,7 +246,7 @@ export function AdminSubmissionsPage() {
             { header: 'Team Name', accessor: (r) => r.teamName },
             { header: 'Team ID', accessor: (r) => r.teamId },
             { header: 'College', accessor: (r) => r.college || '' },
-            { header: 'Location', accessor: (r) => r.collegeLocation || '' },
+            { header: 'Leader PRN', accessor: (r) => r.prn || '' },
             { header: 'Domain', accessor: (r) => r.domain || '' },
             { header: 'Status', accessor: (r) => r.effectiveStatus || r.status || 'draft' },
             { header: 'PPT', accessor: (r) => r.pptUrl || '' },
@@ -284,7 +278,7 @@ export function AdminSubmissionsPage() {
         </div>
       </div>
 
-      {/* College + Location filters */}
+      {/* College + Domain filters */}
       <div className="flex flex-col gap-3 sm:flex-row">
         <label className="flex-1 text-xs font-medium text-ink-500">
           College
@@ -298,17 +292,6 @@ export function AdminSubmissionsPage() {
           </select>
         </label>
         <label className="flex-1 text-xs font-medium text-ink-500">
-          Location
-          <select
-            value={locationFilter}
-            onChange={(e) => setLocationFilter(e.target.value)}
-            className="mt-1 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 py-2 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-          >
-            <option value="all">All locations ({locationOptions.length})</option>
-            {locationOptions.map((l) => <option key={l} value={l}>{l}</option>)}
-          </select>
-        </label>
-        <label className="flex-1 text-xs font-medium text-ink-500">
           Domain
           <select
             value={domainFilter}
@@ -319,10 +302,10 @@ export function AdminSubmissionsPage() {
             {domainOptions.map((d) => <option key={d} value={d}>{d}</option>)}
           </select>
         </label>
-        {(collegeFilter !== 'all' || locationFilter !== 'all' || domainFilter !== 'all' || juryFilter !== 'all') ? (
+        {(collegeFilter !== 'all' || domainFilter !== 'all' || juryFilter !== 'all') ? (
           <button
             type="button"
-            onClick={() => { setCollegeFilter('all'); setLocationFilter('all'); setDomainFilter('all'); setJuryFilter('all') }}
+            onClick={() => { setCollegeFilter('all'); setDomainFilter('all'); setJuryFilter('all') }}
             className="self-end rounded-lg bg-[rgb(var(--surface-muted))] px-3 py-2 text-sm font-medium text-ink-600 hover:bg-[rgb(var(--border))]"
           >
             Clear

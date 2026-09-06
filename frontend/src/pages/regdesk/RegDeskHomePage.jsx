@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ClipboardCheck, Users, CheckCircle2, RefreshCw, Search, ChevronDown, UserCheck, UserX,
-  Crown, Lock, MapPin, Phone, GraduationCap, Building2, Layers, Clock,
+  Crown, Lock, Phone, GraduationCap, Building2, Layers, Clock,
 } from 'lucide-react'
 import { useApi } from '@/hooks/useApi.js'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
@@ -219,7 +219,7 @@ export function RegDeskHomePage() {
                         <p className="truncate font-display font-semibold text-ink-900">{team.name}</p>
                         <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-ink-500">
                           {team.college && <span className="inline-flex items-center gap-1"><Building2 className="h-3 w-3" /> {team.college}</span>}
-                          {team.collegeLocation && <span className="inline-flex items-center gap-1"><MapPin className="h-3 w-3" /> {team.collegeLocation}</span>}
+                          {team.prn && <span className="inline-flex items-center gap-1">PRN {team.prn}</span>}
                         </div>
                       </div>
                     </button>

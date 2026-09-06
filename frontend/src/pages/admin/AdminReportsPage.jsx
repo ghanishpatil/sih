@@ -74,7 +74,6 @@ export function AdminReportsPage() {
   const [users, setUsers] = useState([])
   const [collegeByTeam, setCollegeByTeam] = useState(new Map())
   const [collegeFilter, setCollegeFilter] = useState('all')
-  const [locationFilter, setLocationFilter] = useState('all')
   const [loading, setLoading] = useState(true)
   const [exportingAll, setExportingAll] = useState(false)
 
@@ -100,7 +99,7 @@ export function AdminReportsPage() {
       setUsers(Array.isArray(us) ? us : [])
       const cm = new Map()
       for (const row of (Array.isArray(tc?.teams) ? tc.teams : [])) {
-        cm.set(row.teamId, { college: row.college || '', collegeLocation: row.collegeLocation || '' })
+        cm.set(row.teamId, { college: row.college || '', prn: row.prn || '' })
       }
       setCollegeByTeam(cm)
     } catch {
@@ -205,7 +204,7 @@ export function AdminReportsPage() {
         id: t.id,
         name: t.name || 'Unnamed',
         college: cl.college || '',
-        collegeLocation: cl.collegeLocation || '',
+        prn: cl.prn || '',
         psTitle: t.problemStatementId ? (psTitle.get(t.problemStatementId) || t.problemStatementId) : '',
         registered: Boolean(t.eventRegistered),
       }
@@ -216,28 +215,12 @@ export function AdminReportsPage() {
     () => Array.from(new Set(teamsWithCollege.map((t) => t.college).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
     [teamsWithCollege],
   )
-  const locationOptions = useMemo(
-    () => Array.from(new Set(teamsWithCollege.map((t) => t.collegeLocation).filter(Boolean))).sort((a, b) => a.localeCompare(b)),
-    [teamsWithCollege],
-  )
-
   const filteredTeamsByCollege = useMemo(() => {
     return teamsWithCollege.filter((t) => {
       if (collegeFilter !== 'all' && t.college !== collegeFilter) return false
-      if (locationFilter !== 'all' && t.collegeLocation !== locationFilter) return false
       return true
     })
-  }, [teamsWithCollege, collegeFilter, locationFilter])
-
-  // Count of (filtered) teams per location, for a quick breakdown.
-  const locationBreakdown = useMemo(() => {
-    const counts = new Map()
-    for (const t of filteredTeamsByCollege) {
-      const loc = t.collegeLocation || 'Unspecified'
-      counts.set(loc, (counts.get(loc) || 0) + 1)
-    }
-    return [...counts.entries()].map(([location, count]) => ({ location, count })).sort((a, b) => b.count - a.count)
-  }, [filteredTeamsByCollege])
+  }, [teamsWithCollege, collegeFilter])
 
   // Open Innovation teams broken down by the participant's own problem domain
   // (selfDomain — e.g. Waste Management, Health, Other). Open Innovation problem
@@ -352,7 +335,7 @@ export function AdminReportsPage() {
         { header: 'Payment', accessor: (r) => r.paymentStatus },
         { header: 'Problem Statement', accessor: (r) => psTitleById.get(r.problemStatementId) || r.problemStatementId || '' },
         { header: 'College', accessor: (r) => (collegeByTeam.get(r.id) || {}).college || '' },
-        { header: 'Location', accessor: (r) => (collegeByTeam.get(r.id) || {}).collegeLocation || '' },
+        { header: 'Leader PRN', accessor: (r) => (collegeByTeam.get(r.id) || {}).prn || '' },
         { header: 'Jury Status', accessor: (r) => r.juryStatus || '' },
         { header: 'Submitted', accessor: (r) => (r.submissionLocked ? 'Yes' : 'No') },
         { header: 'Shortlisted', accessor: (r) => (r.shortlisted ? 'Yes' : 'No') },
@@ -695,13 +678,13 @@ export function AdminReportsPage() {
         )}
       </Card>
 
-      {/* Teams by College & Location (filterable) */}
+      {/* Teams by College (filterable) */}
       <Card>
         <div className="flex flex-wrap items-end justify-between gap-2">
           <div>
-            <h2 className="font-display text-lg font-semibold text-ink-900">Teams by College &amp; Location</h2>
+            <h2 className="font-display text-lg font-semibold text-ink-900">Teams by College</h2>
             <p className="mt-1 text-xs text-ink-500">
-              Filter teams by their college and location (from the team leader&apos;s registration details).
+              Team college and leader PRN, from the team leader&apos;s registration details.
             </p>
           </div>
           <Badge tone="brand">{filteredTeamsByCollege.length} team{filteredTeamsByCollege.length === 1 ? '' : 's'}</Badge>
@@ -719,21 +702,10 @@ export function AdminReportsPage() {
               {collegeOptions.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
           </label>
-          <label className="flex-1 text-xs font-medium text-ink-500">
-            Location
-            <select
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 py-2 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
-            >
-              <option value="all">All locations ({locationOptions.length})</option>
-              {locationOptions.map((l) => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </label>
-          {(collegeFilter !== 'all' || locationFilter !== 'all') ? (
+          {collegeFilter !== 'all' ? (
             <button
               type="button"
-              onClick={() => { setCollegeFilter('all'); setLocationFilter('all') }}
+              onClick={() => setCollegeFilter('all')}
               className="self-end rounded-lg bg-[rgb(var(--surface-muted))] px-3 py-2 text-sm font-medium text-ink-600 hover:bg-[rgb(var(--border))]"
             >
               Clear
@@ -741,22 +713,9 @@ export function AdminReportsPage() {
           ) : null}
         </div>
 
-        {/* Count-by-location breakdown */}
-        {locationBreakdown.length > 0 ? (
-          <div className="mt-5 space-y-3">
-            {locationBreakdown.slice(0, 12).map((d) => (
-              <StageBar
-                key={d.location}
-                label={d.location}
-                value={d.count}
-                max={locationBreakdown[0].count}
-                className="from-amber-500 to-orange-400"
-              />
-            ))}
-          </div>
-        ) : (
+        {filteredTeamsByCollege.length === 0 ? (
           <p className="py-8 text-center text-sm text-ink-400">No teams match this filter.</p>
-        )}
+        ) : null}
 
         {/* Matching teams table */}
         {filteredTeamsByCollege.length > 0 ? (
@@ -766,7 +725,7 @@ export function AdminReportsPage() {
                 <tr>
                   <th className="px-3 py-2 font-medium">Team</th>
                   <th className="px-3 py-2 font-medium">College</th>
-                  <th className="px-3 py-2 font-medium">Location</th>
+                  <th className="px-3 py-2 font-medium">Leader PRN</th>
                   <th className="px-3 py-2 font-medium">Problem</th>
                 </tr>
               </thead>
@@ -775,7 +734,7 @@ export function AdminReportsPage() {
                   <tr key={t.id}>
                     <td className="px-3 py-2 font-medium text-ink-900">{t.name}</td>
                     <td className="px-3 py-2 text-ink-600">{t.college || '—'}</td>
-                    <td className="px-3 py-2 text-ink-600">{t.collegeLocation || '—'}</td>
+                    <td className="px-3 py-2 text-ink-600">{t.prn || '—'}</td>
                     <td className="px-3 py-2 text-ink-600">{t.psTitle || '—'}</td>
                   </tr>
                 ))}

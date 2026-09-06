@@ -1,7 +1,7 @@
 import { Router } from 'express'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '../services/firebaseAdmin.js'
-import { BRAND } from '../services/brand.js'
+import { BRAND, FIXED_COLLEGE } from '../services/brand.js'
 import { verifyFirebaseToken, loadUserRole, requireRole, syncRoleClaim } from '../middleware/auth.js'
 import { attachEventContext } from '../middleware/eventContext.js'
 import { judgeMayEvaluateTeam } from '../services/eventConfig.js'
@@ -99,6 +99,9 @@ async function mergedPublicSnapshot(eventId) {
     evaluationsOpen: merged.evaluationsOpen,
     resultsPublished: merged.resultsPublished,
     matchmakingEnabled: merged.matchmakingEnabled,
+    // Participant feature switches — drive nav/route/progress visibility.
+    submissionsEnabled: merged.submissionsEnabled !== false,
+    challengesEnabled: merged.challengesEnabled === true,
     entryFeeEnabled: merged.entryFeeEnabled,
     entryFeeAmount: merged.entryFeeAmount,
     currency: merged.currency,
@@ -627,7 +630,7 @@ export function adminRouter() {
       if (typeof body.slug === 'string') patch.slug = body.slug.slice(0, 80)
       if (typeof body.listedPublic === 'boolean') patch.listedPublic = body.listedPublic
       if (body.lifecyclePhase != null && isValidLifecyclePhase(body.lifecyclePhase)) patch.lifecyclePhase = body.lifecyclePhase
-      const boolKeys = ['registrationOpen', 'submissionsOpen', 'evaluationsOpen', 'resultsPublished', 'entryFeeEnabled', 'matchmakingEnabled', 'challengesEnabled', 'finalistsOnly']
+      const boolKeys = ['registrationOpen', 'submissionsOpen', 'evaluationsOpen', 'resultsPublished', 'entryFeeEnabled', 'matchmakingEnabled', 'submissionsEnabled', 'challengesEnabled', 'finalistsOnly']
       for (const k of boolKeys) {
         if (typeof body[k] === 'boolean') patch[k] = body[k]
       }
@@ -1061,8 +1064,8 @@ export function adminRouter() {
           personMatches.push({
             name: m.name || '', email: m.email || '', phone: m.phone || '',
             // College details captured at registration time (stored on memberRegistrations).
-            college: m.institute || m.college || '',
-            collegeLocation: m.collegeLocation || '',
+            college: m.institute || m.college || FIXED_COLLEGE,
+            prn: m.prn || '',
             yearOfStudy: m.yearOfStudy || '',
             department: m.department || '',
             isLeader: Boolean(m.isLeader), teamId: m.teamId || '', source: 'member',
@@ -1111,7 +1114,7 @@ export function adminRouter() {
           .sort((a, b) => (a.order || 0) - (b.order || 0))
           .map((m) => ({
             name: m.name || '', email: m.email || '', phone: m.phone || '',
-            college: m.institute || m.college || '', collegeLocation: m.collegeLocation || '',
+            college: m.institute || m.college || FIXED_COLLEGE, prn: m.prn || '',
             yearOfStudy: m.yearOfStudy || '', department: m.department || '',
             isLeader: Boolean(m.isLeader),
           }))
@@ -1180,8 +1183,8 @@ export function adminRouter() {
         const leader = sorted.find((m) => m.isLeader) || sorted[0] || {}
         teams.push({
           teamId,
-          college: leader.institute || leader.college || '',
-          collegeLocation: leader.collegeLocation || '',
+          college: leader.institute || leader.college || FIXED_COLLEGE,
+          prn: leader.prn || '',
         })
       }
       res.json({ teams })
@@ -5662,8 +5665,8 @@ export function registrationDeskRouter() {
           name: x.name || '',
           email: x.email || '',
           phone: x.phone || '',
-          college: x.institute || x.college || '',
-          collegeLocation: x.collegeLocation || '',
+          college: x.institute || x.college || FIXED_COLLEGE,
+          prn: x.prn || '',
           yearOfStudy: x.yearOfStudy || '',
           department: x.department || '',
           isLeader: Boolean(x.isLeader),
@@ -5684,7 +5687,7 @@ export function registrationDeskRouter() {
         presentCount,
         totalMembers: members.length,
         college: leader?.college || '',
-        collegeLocation: leader?.collegeLocation || '',
+        prn: leader?.prn || '',
       }
     }).sort((a, b) => a.domain.localeCompare(b.domain) || a.name.localeCompare(b.name))
   }
@@ -5812,12 +5815,12 @@ export function registrationDeskRouter() {
       }
       const teams = await loadTeams(req, override)
       const rows = []
-      rows.push(['Team Name', 'Domain', 'Track', 'Problem Statement', 'College', 'College Location', 'Member Name', 'Email', 'Phone', 'Year', 'Department', 'Is Leader', 'Attendance', 'Team Present', 'Team Size', 'Team %'])
+      rows.push(['Team Name', 'Domain', 'Track', 'Problem Statement', 'College', 'PRN', 'Member Name', 'Email', 'Phone', 'Year', 'Department', 'Is Leader', 'Attendance', 'Team Present', 'Team Size', 'Team %'])
 
       for (const t of teams) {
         const pct = t.totalMembers > 0 ? Math.round((t.presentCount / t.totalMembers) * 100) : 0
         if (t.members.length === 0) {
-          rows.push([t.name, t.domain, t.track, t.psTitle, t.college, t.collegeLocation, '', '', '', '', '', '', '', t.presentCount, t.totalMembers, pct])
+          rows.push([t.name, t.domain, t.track, t.psTitle, t.college, t.prn, '', '', '', '', '', '', '', t.presentCount, t.totalMembers, pct])
         } else {
           t.members.forEach((m, i) => {
             rows.push([
@@ -5826,7 +5829,7 @@ export function registrationDeskRouter() {
               i === 0 ? t.track : '',
               i === 0 ? t.psTitle : '',
               m.college,
-              m.collegeLocation,
+              m.prn,
               m.name,
               m.email,
               m.phone,

@@ -636,7 +636,7 @@ export function AdminJuryPage() {
                                   {m.email ? <span className="truncate">✉ {m.email}</span> : null}
                                   {m.phone ? <span>☎ {m.phone}</span> : null}
                                   {m.institute ? <span className="truncate">🏫 {m.institute}</span> : null}
-                                  {m.collegeLocation ? <span className="truncate">📍 {m.collegeLocation}</span> : null}
+                                  {m.prn ? <span className="truncate">🆔 PRN {m.prn}</span> : null}
                                   {m.yearOfStudy ? <span>🎓 {m.yearOfStudy}</span> : null}
                                   {m.department ? <span className="truncate">🏷 {m.department}</span> : null}
                                 </div>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getDownloadURL, ref, uploadBytesResumable } from 'firebase/storage'
-import { Link } from 'react-router-dom'
+import { Link, Navigate } from 'react-router-dom'
 import { Upload, FileText, Github, Video, ArrowLeft, Lock, AlertTriangle, CheckCircle, ChevronDown, Sparkles } from 'lucide-react'
 import { storage } from '@/firebase/client.js'
 import { useAuth } from '@/context/AuthContext.jsx'
@@ -38,7 +38,7 @@ function assertFile(kind, file) {
 export function SubmissionPage() {
   usePageSeo({ title: 'Submission Center', description: 'Upload hackathon submission assets.' })
   const { user, profile } = useAuth()
-  const { eventId, eventCfg } = useEvent()   // ← live from Firestore onSnapshot
+  const { eventId, eventCfg, eventLoading } = useEvent()   // ← live from Firestore onSnapshot
   const api = useApi()
   const [sub, setSub] = useState(null)
   const [githubUrl, setGithubUrl] = useState('')
@@ -267,6 +267,11 @@ export function SubmissionPage() {
     } catch (e) {
       setStatus(e.message || 'Could not finalize')
     }
+  }
+
+  // Route guard: if an admin turned Submissions off, redirect away.
+  if (!eventLoading && eventCfg && eventCfg.submissionsEnabled === false) {
+    return <Navigate to="/dashboard" replace />
   }
 
   if (!teamId) {
