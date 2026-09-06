@@ -13,7 +13,7 @@ import {
   ArrowUpDown, ArrowUp, ArrowDown, ChevronDown, Copy, Check, Star,
   Filter, ExternalLink, Clock, AlertCircle, TrendingUp, Flame, ChevronLeft,
   HeartPulse, GraduationCap, Bus, Utensils, Recycle, Sprout, Factory, Lightbulb, Tag,
-  Download, Sparkles,
+  Sparkles,
 } from 'lucide-react'
 import { Skeleton } from '@/components/ui/Skeleton.jsx'
 import { Input } from '@/components/ui/Input.jsx'
@@ -652,18 +652,6 @@ export function ProblemsPage() {
               Browse curated challenges from government departments, industry partners, and academia.
               Search, filter, and select your problem to begin.
             </p>
-            
-            {/* Download Action */}
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <a
-                href="/SKH_IDEA_PRESENTATION_FORMAT.pptx"
-                download
-                className="inline-flex items-center gap-2 rounded-lg border-2 border-white/30 bg-white/10 px-4 py-2.5 font-semibold text-white backdrop-blur-sm transition-all hover:border-white/50 hover:bg-white/20 hover:shadow-lg"
-              >
-                <Download className="h-5 w-5" />
-                Download Presentation Format
-              </a>
-            </div>
           </motion.div>
         </div>
       </section>
