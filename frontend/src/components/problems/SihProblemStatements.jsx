@@ -138,7 +138,11 @@ export function SihProblemStatements({
             {' · '}
             {meta.count ?? items.length} statements ({swCount} software · {hwCount} hardware)
             {' · '}
-            synced {timeAgo(meta.lastSyncAt)}
+            {meta.lastSyncAt
+              ? `synced ${timeAgo(meta.lastSyncAt)}`
+              : meta.fromSeed
+                ? `bundled snapshot${meta.capturedAt ? ` from ${new Date(meta.capturedAt).toLocaleDateString()}` : ''}`
+                : 'not synced yet'}
           </p>
         </div>
         {onRefresh ? (
@@ -156,13 +160,26 @@ export function SihProblemStatements({
         ) : null}
       </div>
 
-      {/* Stale/error notice */}
+      {/* Stale / blocked notice. sih.gov.in's WAF can reject requests from our
+          hosting provider, in which case we serve the snapshot bundled with the
+          release — the full list is intact, only the submitted counts are frozen. */}
       {meta.ok === false && meta.error ? (
         <div className="flex items-start gap-2 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            Live refresh failed ({meta.error}). Showing the last successfully fetched data
-            {meta.lastSyncAt ? ` from ${timeAgo(meta.lastSyncAt)}` : ''}.
+            {meta.fromSeed ? (
+              <>
+                Live refresh is currently blocked by sih.gov.in ({meta.error}). Showing the complete
+                bundled list
+                {meta.capturedAt ? ` captured on ${new Date(meta.capturedAt).toLocaleDateString()}` : ''} —
+                titles and descriptions are accurate, but the submitted-idea counts are not live.
+              </>
+            ) : (
+              <>
+                Live refresh failed ({meta.error}). Showing the last successfully fetched data
+                {meta.lastSyncAt ? ` from ${timeAgo(meta.lastSyncAt)}` : ''}.
+              </>
+            )}
           </span>
         </div>
       ) : null}

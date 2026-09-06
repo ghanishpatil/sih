@@ -30,6 +30,29 @@ const FETCH_TIMEOUT_MS = 20000
 // Serve from memory; refresh when the snapshot is older than this on access.
 const STALE_MS = 10 * 60 * 1000 // 10 minutes
 
+// sih.gov.in sits behind a WAF that returns 403 for bot-looking requests
+// (verified: a "python-requests/…" User-Agent is rejected while a browser UA is
+// served). Cloud/datacenter IPs are scored more harshly than residential ones,
+// so from a hosting provider we must present a complete, realistic browser
+// header set — a UA alone is not enough.
+//
+// NOTE: deliberately no Accept-Encoding here. undici (Node's fetch) sets and
+// transparently decompresses its own encoding; overriding it can hand us a
+// compressed body we never decode.
+const BROWSER_HEADERS = {
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36',
+  Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language': 'en-IN,en-GB;q=0.9,en;q=0.8',
+  'Upgrade-Insecure-Requests': '1',
+  'Sec-Fetch-Dest': 'document',
+  'Sec-Fetch-Mode': 'navigate',
+  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-User': '?1',
+  'Cache-Control': 'no-cache',
+  Pragma: 'no-cache',
+}
+
 // ── In-memory snapshot ───────────────────────────────────────────────────────
 let snapshot = {
   items: [],
@@ -40,8 +63,48 @@ let snapshot = {
   ok: false,
   error: null,
   source: SIH_SOURCE_URL,
+  fromSeed: false,
+  capturedAt: null, // when the bundled snapshot was captured (seed only)
 }
 let inflight = null
+let seedLoaded = false
+
+/**
+ * Bundled snapshot fallback.
+ *
+ * sih.gov.in's WAF can block datacenter IPs outright, which would otherwise leave
+ * production with an empty problem-statement list. A snapshot committed with the
+ * code guarantees the full list is always available; the live scrape then only
+ * needs to succeed to refresh the submitted-idea counts.
+ */
+async function loadSeedSnapshot() {
+  if (seedLoaded) return false
+  seedLoaded = true
+  try {
+    const { readFile } = await import('node:fs/promises')
+    const url = new URL('../data/sih2026Seed.json', import.meta.url)
+    const seed = JSON.parse(await readFile(url, 'utf8'))
+    const items = Array.isArray(seed?.items) ? seed.items : []
+    if (items.length === 0) return false
+    snapshot = {
+      items,
+      count: items.length,
+      softwareCount: seed.softwareCount ?? items.filter((p) => /software/i.test(p.category)).length,
+      hardwareCount: seed.hardwareCount ?? items.filter((p) => /hardware/i.test(p.category)).length,
+      lastSyncAt: null,
+      ok: false,
+      error: snapshot.error,
+      source: SIH_SOURCE_URL,
+      fromSeed: true,
+      capturedAt: seed.capturedAt || null,
+    }
+    console.log(`[sih-scraper] using bundled snapshot (${items.length} problem statements)`)
+    return true
+  } catch (e) {
+    console.warn('[sih-scraper] bundled snapshot unavailable:', e.message)
+    return false
+  }
+}
 
 // ── Mojibake repair (UTF-8 misread as Windows-1252, then re-saved as UTF-8) ───
 const REV1252 = {
@@ -197,22 +260,41 @@ export function parseSihHtml(rawHtml) {
   return items
 }
 
-async function fetchSihHtml() {
+async function fetchOnce(extraHeaders = {}) {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   try {
     const res = await fetch(SIH_SOURCE_URL, {
       signal: controller.signal,
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (compatible; SIH-Internal-Platform/1.0; +https://skh.sanjivaniuniversity.com)',
-        Accept: 'text/html',
-      },
+      redirect: 'follow',
+      headers: { ...BROWSER_HEADERS, ...extraHeaders },
     })
-    if (!res.ok) throw new Error(`SIH responded ${res.status}`)
+    if (!res.ok) {
+      const err = new Error(`SIH responded ${res.status}`)
+      err.status = res.status
+      throw err
+    }
     return await res.text()
   } finally {
     clearTimeout(timer)
+  }
+}
+
+/**
+ * Fetch the listing page. If the WAF blocks the first attempt (403/429) retry once
+ * presenting a same-site referer — often enough to clear a reputation check on a
+ * datacenter IP.
+ */
+async function fetchSihHtml() {
+  try {
+    return await fetchOnce()
+  } catch (e) {
+    if (e?.status !== 403 && e?.status !== 429) throw e
+    await new Promise((r) => setTimeout(r, 1200))
+    return await fetchOnce({
+      Referer: 'https://sih.gov.in/',
+      'Sec-Fetch-Site': 'same-origin',
+    })
   }
 }
 
@@ -227,6 +309,7 @@ async function writeMeta(meta) {
       hardwareCount: meta.hardwareCount,
       ok: meta.ok,
       error: meta.error || null,
+      fromSeed: meta.fromSeed === true,
       source: SIH_SOURCE_URL,
       updatedAt: FieldValue.serverTimestamp(),
     }
@@ -254,6 +337,8 @@ async function doRefresh() {
       ok: true,
       error: null,
       source: SIH_SOURCE_URL,
+      fromSeed: false,
+      capturedAt: null,
     }
     void writeMeta(snapshot)
     console.log(`[sih-scraper] synced ${items.length} problem statements (${softwareCount} sw / ${hardwareCount} hw)`)
@@ -262,8 +347,11 @@ async function doRefresh() {
     const msg = e?.name === 'AbortError' ? 'Timed out fetching sih.gov.in' : e?.message || 'Scrape failed'
     // Keep the last good items; only update the error/ok flags.
     snapshot = { ...snapshot, ok: false, error: msg }
-    void writeMeta(snapshot)
     console.warn(`[sih-scraper] refresh failed: ${msg}`)
+    // Nothing to serve yet (e.g. the host is WAF-blocked) — fall back to the
+    // snapshot bundled with the code so the list is never empty.
+    if (snapshot.items.length === 0) await loadSeedSnapshot()
+    void writeMeta(snapshot)
     return snapshot
   }
 }
@@ -284,6 +372,8 @@ export async function refreshSihSnapshot({ force = false } = {}) {
 export async function getSihSnapshot() {
   if (!snapshot.items.length || !snapshot.lastSyncAt) {
     await refreshSihSnapshot({ force: true })
+    // Still nothing (blocked/offline on first hit) — serve the bundled snapshot.
+    if (snapshot.items.length === 0) await loadSeedSnapshot()
   } else {
     const age = Date.now() - new Date(snapshot.lastSyncAt).getTime()
     if (age > STALE_MS) void refreshSihSnapshot() // refresh in background, serve current
