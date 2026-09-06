@@ -54,11 +54,180 @@ const DEPARTMENTS = [
   'Integrated B.Tech', 'Integrated M.Tech', 'BBA', 'BCOM', 'MBA', 'B.SC', 'M.SC',
 ]
 
-// Team qualification statuses (set by judges, viewed by admin).
-const JURY_STATUS_TONE = { qualified: 'success', waitlist: 'warn', not_qualified: 'danger' }
-const JURY_STATUS_LABEL = { qualified: 'Qualified', waitlist: 'Waitlist', not_qualified: 'Not qualified' }
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Department jury panel builder.
+ *
+ * The admin picks a department, sets how many judges will sit on its panel
+ * (the limit), then fills the ordered slots — slot 1 is "Judge 1", slot 2 is
+ * "Judge 2". Order is a LABEL only; it carries no scoring weight. Every judge
+ * on the panel scores each team in that department independently, and the
+ * team's final score is the average once all of them submit.
+ */
+function JuryPanelBuilder({
+  departments, panels, judges, teamCounts, teamsWithoutDepartment, maxPanelSize,
+  panelDept, setPanelDept, panelLimit, setPanelLimit, panelSlots, setPanelSlots,
+  saving, onSave,
+}) {
+  const configuredCount = Object.values(panels).filter((p) => (p?.judges?.length || 0) > 0).length
+  const judgeLabel = (uid) => {
+    const j = judges.find((u) => u.id === uid)
+    return j ? j.email || j.displayName || uid : uid
+  }
+
+  return (
+    <Card>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-ink-900">
+            <Users className="h-4 w-4 text-brand-500" />
+            Jury panels (by department)
+          </h2>
+          <p className="mt-1 max-w-3xl text-sm text-ink-600">
+            Set how many judges sit on each department&apos;s panel and who they are. All panel judges
+            evaluate the <strong>same teams at the same time</strong>, independently — a team&apos;s final
+            score is the <strong>average of their scores</strong>, calculated only once every judge on
+            the panel has submitted.
+          </p>
+        </div>
+        <Badge tone={configuredCount > 0 ? 'success' : 'neutral'}>{configuredCount} panel(s) configured</Badge>
+      </div>
+
+      {teamsWithoutDepartment > 0 ? (
+        <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
+          <span className="mt-0.5 shrink-0 font-bold">!</span>
+          <p>
+            <strong>{teamsWithoutDepartment} team(s) have no department set</strong> — they will not appear
+            for any panel and cannot receive a final score. Department is captured from the team
+            leader during registration.
+          </p>
+        </div>
+      ) : null}
+
+      {/* Editor */}
+      <div className="mt-5 grid gap-4 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface-muted))]/30 p-4 sm:grid-cols-2">
+        <div>
+          <label htmlFor="panel-dept" className="mb-1.5 block text-sm font-medium text-ink-700">Department</label>
+          <select
+            id="panel-dept"
+            value={panelDept}
+            onChange={(e) => setPanelDept(e.target.value)}
+            className="h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          >
+            <option value="">Choose a department…</option>
+            {departments.map((d) => {
+              const count = teamCounts[d] || 0
+              const size = panels[d]?.judges?.length || 0
+              return (
+                <option key={d} value={d}>
+                  {d} — {count} team(s){size > 0 ? ` · ${size} judge(s)` : ''}
+                </option>
+              )
+            })}
+          </select>
+        </div>
+        <div>
+          <label htmlFor="panel-limit" className="mb-1.5 block text-sm font-medium text-ink-700">
+            Judges on this panel (limit)
+          </label>
+          <select
+            id="panel-limit"
+            value={panelLimit}
+            disabled={!panelDept}
+            onChange={(e) => setPanelLimit(Number(e.target.value))}
+            className="h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 text-sm text-ink-900 disabled:opacity-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          >
+            {Array.from({ length: maxPanelSize }, (_, i) => i + 1).map((n) => (
+              <option key={n} value={n}>{n} judge{n === 1 ? '' : 's'}</option>
+            ))}
+          </select>
+        </div>
+
+        {panelDept ? (
+          <div className="sm:col-span-2">
+            <p className="mb-2 text-sm font-medium text-ink-700">
+              Panel members <span className="text-ink-400">(order is a label only)</span>
+            </p>
+            <div className="space-y-2">
+              {panelSlots.map((uid, idx) => (
+                <div key={idx} className="flex items-center gap-2">
+                  <span className="w-20 shrink-0 rounded-lg bg-brand-500/10 px-2 py-1.5 text-center text-xs font-bold text-brand-700">
+                    Judge {idx + 1}
+                  </span>
+                  <select
+                    value={uid}
+                    onChange={(e) =>
+                      setPanelSlots((prev) => prev.map((v, i) => (i === idx ? e.target.value : v)))
+                    }
+                    aria-label={`Judge ${idx + 1} for ${panelDept}`}
+                    className="h-11 min-w-0 flex-1 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  >
+                    <option value="">— empty —</option>
+                    {judges.map((u) => (
+                      <option key={u.id} value={u.id}>{u.email || u.displayName || u.id}</option>
+                    ))}
+                  </select>
+                </div>
+              ))}
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <Button type="button" disabled={saving} onClick={() => void onSave()}>
+                {saving ? 'Saving…' : `Save ${panelDept} panel`}
+              </Button>
+              <span className="text-xs text-ink-500">
+                Leave a slot empty to reduce the panel. Saving also updates each judge&apos;s department access.
+              </span>
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-ink-500 sm:col-span-2">
+            Pick a department above to build its panel.
+          </p>
+        )}
+      </div>
+
+      {/* Existing panels overview */}
+      <div className="mt-5">
+        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-500">All panels</p>
+        {configuredCount === 0 ? (
+          <p className="text-sm text-ink-500">No panels configured yet.</p>
+        ) : (
+          <div className="space-y-2">
+            {departments
+              .filter((d) => (panels[d]?.judges?.length || 0) > 0)
+              .map((d) => {
+                const p = panels[d]
+                return (
+                  <div
+                    key={d}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[rgb(var(--border))] px-3 py-2.5"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-ink-900">{d}</p>
+                      <p className="text-xs text-ink-500">
+                        {teamCounts[d] || 0} team(s) · {p.judges.length} of {p.limit} slot(s) filled
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      {p.judges.map((uid, i) => (
+                        <Badge key={uid} tone="brand" className="text-[10px]">
+                          J{i + 1}: {judgeLabel(uid)}
+                        </Badge>
+                      ))}
+                      <Button type="button" size="sm" variant="secondary" onClick={() => setPanelDept(d)}>
+                        Edit
+                      </Button>
+                    </div>
+                  </div>
+                )
+              })}
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
 
 function MetaRow({ label, value }) {
   const v = String(value || '').trim()
@@ -193,20 +362,42 @@ export function AdminJuryPage() {
   const [showClearConfirm, setShowClearConfirm] = useState(false) // By Team tab: confirm the bulk clear
   const [bulkCsvResult, setBulkCsvResult] = useState(null) // By Team tab: parsed CSV match result
   const [bulkAssigning, setBulkAssigning] = useState(false) // By Team tab: bulk CSV assign in progress
-  // Expandable team-status rows: show full member details on click.
+  // Expandable team rows: show full member details on click.
   const [expandedTeamId, setExpandedTeamId] = useState('')
   const [teamMembers, setTeamMembers] = useState({}) // teamId → { loading, members }
 
+  // ── Jury panels (department-wise, ordered judges) ──────────────────────────
+  const [panels, setPanels] = useState({}) // department → { limit, judges: [uid] }
+  const [panelTeamCounts, setPanelTeamCounts] = useState({})
+  const [teamsWithoutDepartment, setTeamsWithoutDepartment] = useState(0)
+  const [maxPanelSize, setMaxPanelSize] = useState(5)
+  const [panelDept, setPanelDept] = useState('')
+  const [panelLimit, setPanelLimit] = useState(2)
+  const [panelSlots, setPanelSlots] = useState([]) // ordered uids; index 0 = Judge 1
+  const [panelSaving, setPanelSaving] = useState(false)
+
+  // ── Official per-team final scores (average of the panel's judges) ─────────
+  const [finalScores, setFinalScores] = useState([])
+  const [scoresLoading, setScoresLoading] = useState(true)
+  const [offPanelTotal, setOffPanelTotal] = useState(0)
+
   const refreshData = useCallback(async () => {
     try {
-      const [usersData, problemsData, teamsData] = await Promise.all([
+      const [usersData, problemsData, teamsData, panelData] = await Promise.all([
         api.listUsers(),
         publicApi.listProblemStatements(eventId || undefined),
         api.adminTeams().catch(() => []),
+        api.getJudgePanels().catch(() => null),
       ])
       setUsers(Array.isArray(usersData) ? usersData : [])
       setProblems(Array.isArray(problemsData) ? problemsData : [])
       setTeams(Array.isArray(teamsData) ? teamsData : [])
+      if (panelData) {
+        setPanels(panelData.panels && typeof panelData.panels === 'object' ? panelData.panels : {})
+        setPanelTeamCounts(panelData.teamCounts || {})
+        setTeamsWithoutDepartment(Number(panelData.teamsWithoutDepartment) || 0)
+        if (typeof panelData.maxPanelSize === 'number') setMaxPanelSize(panelData.maxPanelSize)
+      }
     } catch {
       setUsers([])
       setProblems([])
@@ -216,7 +407,65 @@ export function AdminJuryPage() {
     }
   }, [api, eventId])
 
+  const refreshScores = useCallback(async () => {
+    setScoresLoading(true)
+    try {
+      const res = await api.getTeamFinalScores()
+      setFinalScores(Array.isArray(res?.items) ? res.items : [])
+      setOffPanelTotal(Number(res?.offPanelTotal) || 0)
+    } catch {
+      setFinalScores([])
+      setOffPanelTotal(0)
+    } finally {
+      setScoresLoading(false)
+    }
+  }, [api])
+
   useEffect(() => { void refreshData() }, [refreshData])
+  useEffect(() => { void refreshScores() }, [refreshScores])
+
+  // Load the selected department's existing panel into the editor.
+  useEffect(() => {
+    if (!panelDept) { setPanelSlots([]); setPanelLimit(2); return }
+    const p = panels[panelDept]
+    const limit = typeof p?.limit === 'number' && p.limit > 0 ? p.limit : 2
+    const judgesList = Array.isArray(p?.judges) ? p.judges : []
+    setPanelLimit(limit)
+    setPanelSlots(Array.from({ length: limit }, (_, i) => judgesList[i] || ''))
+  }, [panelDept, panels])
+
+  // Keep the number of judge slots in sync with the limit.
+  useEffect(() => {
+    setPanelSlots((prev) => {
+      const next = Array.from({ length: panelLimit }, (_, i) => prev[i] || '')
+      return next.length === prev.length && next.every((v, i) => v === prev[i]) ? prev : next
+    })
+  }, [panelLimit])
+
+  async function savePanel() {
+    if (!panelDept) { setMsg('Pick a department first.'); return }
+    const chosen = panelSlots.map((s) => String(s || '').trim()).filter(Boolean)
+    if (new Set(chosen).size !== chosen.length) {
+      setMsg('The same judge cannot occupy two slots on one panel.')
+      return
+    }
+    setPanelSaving(true)
+    setMsg('')
+    try {
+      await api.setJudgePanel({ department: panelDept, limit: panelLimit, judges: chosen })
+      setMsg(
+        chosen.length === 0
+          ? `Panel cleared for ${panelDept}.`
+          : `Panel saved for ${panelDept} — ${chosen.length} of ${panelLimit} judge(s) assigned.`,
+      )
+      await refreshData()
+      await refreshScores()
+    } catch (e) {
+      setMsg(e.message || 'Could not save the panel')
+    } finally {
+      setPanelSaving(false)
+    }
+  }
 
   // When judge changes, load their current PS assignments
   useEffect(() => {
@@ -459,28 +708,32 @@ export function AdminJuryPage() {
     [teams, judgeId],
   )
 
-  // ── Team status (confirmed / qualified / waitlisted) — read-only for admin;
-  //    set by judges during evaluation. ────────────────────────────────────────
+  // ── Official final scores — the average of the department panel's judges,
+  //    calculated only once EVERY judge on that panel has submitted. ──────────
 
   const statusCounts = useMemo(() => {
-    const c = { qualified: 0, waitlist: 0, not_qualified: 0, unset: 0 }
-    for (const t of teams) {
-      if (t.juryStatus === 'qualified') c.qualified++
-      else if (t.juryStatus === 'waitlist') c.waitlist++
-      else if (t.juryStatus === 'not_qualified') c.not_qualified++
-      else c.unset++
+    const c = { final: 0, waiting: 0, noPanel: 0 }
+    for (const row of finalScores) {
+      if (row.expectedCount === 0) c.noPanel++
+      else if (row.isFinal) c.final++
+      else c.waiting++
     }
     return c
-  }, [teams])
+  }, [finalScores])
 
   const statusTeams = useMemo(() => {
     const q = statusSearch.trim().toLowerCase()
-    let list = teams
-    if (statusFilter === 'unset') list = list.filter((t) => !t.juryStatus)
-    else if (statusFilter !== 'all') list = list.filter((t) => t.juryStatus === statusFilter)
-    if (q) list = list.filter((t) => `${t.name || ''} ${t.inviteCode || ''} ${t.id}`.toLowerCase().includes(q))
-    return [...list].sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)))
-  }, [teams, statusFilter, statusSearch])
+    let list = finalScores
+    if (statusFilter === 'final') list = list.filter((r) => r.isFinal)
+    else if (statusFilter === 'waiting') list = list.filter((r) => r.expectedCount > 0 && !r.isFinal)
+    else if (statusFilter === 'nopanel') list = list.filter((r) => r.expectedCount === 0)
+    if (q) {
+      list = list.filter((r) =>
+        `${r.teamName || ''} ${r.department || ''} ${r.teamId}`.toLowerCase().includes(q),
+      )
+    }
+    return [...list].sort((a, b) => String(a.teamName || a.teamId).localeCompare(String(b.teamName || b.teamId)))
+  }, [finalScores, statusFilter, statusSearch])
 
   // Toggle a team row open and lazily load its member details (leader-entered,
   // stored separately from account UIDs) — same source used by the Teams page.
@@ -530,32 +783,61 @@ export function AdminJuryPage() {
         </div>
       ) : null}
 
-      {/* Team status management */}
+      {/* ── Jury panels: the ordered judge panel for each department ── */}
+      <JuryPanelBuilder
+        departments={DEPARTMENTS}
+        panels={panels}
+        judges={judges}
+        teamCounts={panelTeamCounts}
+        teamsWithoutDepartment={teamsWithoutDepartment}
+        maxPanelSize={maxPanelSize}
+        panelDept={panelDept}
+        setPanelDept={setPanelDept}
+        panelLimit={panelLimit}
+        setPanelLimit={setPanelLimit}
+        panelSlots={panelSlots}
+        setPanelSlots={setPanelSlots}
+        saving={panelSaving}
+        onSave={savePanel}
+      />
+
+      {/* Team final scores (average of the panel's judges) */}
       <Card>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="font-display text-lg font-semibold text-ink-900">Team status</h2>
+            <h2 className="font-display text-lg font-semibold text-ink-900">Team final scores</h2>
             <p className="mt-1 text-sm text-ink-600">
-              Teams marked <strong>Confirmed</strong>, <strong>Qualified</strong>, or <strong>Waitlisted</strong> by the
-              judges. This view is read-only — statuses are set by judges during evaluation.
+              Each team is scored independently by every judge on its department panel. The final score is the{' '}
+              <strong>average of those judges</strong>, and is only calculated once{' '}
+              <strong>all of them have submitted</strong>.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Badge tone="success">{statusCounts.qualified} qualified</Badge>
-            <Badge tone="warn">{statusCounts.waitlist} waitlist</Badge>
-            <Badge tone="danger">{statusCounts.not_qualified} not qualified</Badge>
-            <Badge tone="neutral">{statusCounts.unset} unset</Badge>
+            <Badge tone="success">{statusCounts.final} final</Badge>
+            <Badge tone="warn">{statusCounts.waiting} awaiting judges</Badge>
+            <Badge tone="neutral">{statusCounts.noPanel} no panel</Badge>
           </div>
         </div>
+
+        {offPanelTotal > 0 ? (
+          <div className="mt-4 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
+            <span className="mt-0.5 shrink-0 font-bold">!</span>
+            <p>
+              <strong>{offPanelTotal} evaluation(s) are not being counted.</strong> They were submitted
+              by judges who are not on the relevant department panel, so they are excluded from the
+              average. Expand a team below to see which judge, then either add them to that panel or
+              ignore it.
+            </p>
+          </div>
+        ) : null}
 
         {/* Filter chips */}
         <div className="mt-4 flex flex-wrap gap-2">
           {[
             { id: 'all', label: 'All' },
-            { id: 'qualified', label: 'Qualified' },
-            { id: 'waitlist', label: 'Waitlist' },
-            { id: 'not_qualified', label: 'Not Qualified' },
-            { id: 'unset', label: 'Unset' },
+            { id: 'final', label: 'Final' },
+            { id: 'waiting', label: 'Awaiting judges' },
+            { id: 'nopanel', label: 'No panel' },
           ].map((f) => (
             <button
               key={f.id}
@@ -576,46 +858,122 @@ export function AdminJuryPage() {
           <input
             value={statusSearch}
             onChange={(e) => setStatusSearch(e.target.value)}
-            placeholder="Search team by name or code…"
+            placeholder="Search team by name or department…"
             className="w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] py-2.5 pl-9 pr-3 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
           />
         </div>
 
-        {teams.length === 0 ? (
+        {scoresLoading ? (
+          <p className="mt-4 text-sm text-ink-500">Loading final scores…</p>
+        ) : finalScores.length === 0 ? (
           <p className="mt-4 text-sm text-ink-500">No teams found yet.</p>
         ) : statusTeams.length === 0 ? (
           <p className="mt-4 text-sm text-ink-500">No teams match this filter.</p>
         ) : (
           <div className="mt-4 max-h-[34rem] space-y-2 overflow-y-auto rounded-xl border border-[rgb(var(--border))] p-3">
-            {statusTeams.map((t) => {
-              const isOpen = expandedTeamId === t.id
-              const detail = teamMembers[t.id]
+            {statusTeams.map((row) => {
+              const t = row
+              const isOpen = expandedTeamId === t.teamId
+              const detail = teamMembers[t.teamId]
               return (
-                <div key={t.id} className="rounded-xl border border-[rgb(var(--border))]">
+                <div key={t.teamId} className="rounded-xl border border-[rgb(var(--border))]">
                   <button
                     type="button"
-                    onClick={() => toggleTeamDetails(t.id)}
+                    onClick={() => toggleTeamDetails(t.teamId)}
                     className="flex w-full items-center gap-2 p-3 text-left transition-colors hover:bg-[rgb(var(--surface-muted))]/40"
                   >
                     {isOpen
                       ? <ChevronDown className="h-4 w-4 shrink-0 text-brand-600" />
                       : <ChevronRight className="h-4 w-4 shrink-0 text-ink-400" />}
                     <div className="min-w-0 flex-1">
-                      <span className="truncate text-sm font-medium text-ink-900">{t.name || 'Unnamed team'}</span>
+                      <span className="truncate text-sm font-medium text-ink-900">{t.teamName || 'Unnamed team'}</span>
                       <p className="text-xs text-ink-500">
-                        <span className="font-mono">{t.inviteCode || t.id.slice(0, 6)}</span>
+                        {t.department
+                          ? <span>{t.department}</span>
+                          : <span className="text-amber-700">No department set</span>}
                         {t.problemStatementId ? <span> · PS <span className="font-mono">{t.problemStatementId}</span></span> : ''}
+                        {t.expectedCount > 0
+                          ? <span> · {t.submittedCount}/{t.expectedCount} judges submitted</span>
+                          : null}
                       </p>
                     </div>
-                    {t.juryStatus ? (
-                      <Badge tone={JURY_STATUS_TONE[t.juryStatus] || 'neutral'} className="shrink-0 text-xs">{JURY_STATUS_LABEL[t.juryStatus] || t.juryStatus}</Badge>
+                    {t.expectedCount === 0 ? (
+                      <Badge tone="neutral" className="shrink-0 text-xs">No panel</Badge>
+                    ) : t.isFinal ? (
+                      <span className="shrink-0 rounded-lg bg-emerald-500/10 px-2.5 py-1 font-mono text-sm font-bold text-emerald-700">
+                        {t.finalScore}%
+                      </span>
                     ) : (
-                      <Badge tone="neutral" className="shrink-0 text-xs">Unset</Badge>
+                      <Badge tone="warn" className="shrink-0 text-xs">
+                        {t.submittedCount}/{t.expectedCount} submitted
+                      </Badge>
                     )}
                   </button>
 
                   {isOpen ? (
                     <div className="border-t border-[rgb(var(--border))] bg-[rgb(var(--surface-muted))]/30 p-3">
+                      {/* Scores from judges who are NOT on this team's panel. They are
+                          NOT counted in the average — surfaced so no work is lost silently. */}
+                      {t.offPanelJudges && t.offPanelJudges.length > 0 ? (
+                        <div className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-wide text-amber-800">
+                            Not counted — judge(s) off this panel
+                          </p>
+                          <div className="mt-1.5 space-y-1">
+                            {t.offPanelJudges.map((j) => (
+                              <div key={j.uid} className="flex items-center justify-between gap-2 text-xs text-amber-900">
+                                <span className="min-w-0 truncate">{j.name}</span>
+                                <span className="shrink-0 font-mono font-bold">
+                                  {typeof j.scorePct === 'number' ? `${j.scorePct}%` : 'submitted'}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                          <p className="mt-1.5 text-[11px] leading-snug text-amber-800">
+                            These judges scored this team but are not on the{' '}
+                            {t.department || 'department'} panel, so their scores are excluded from the
+                            average. Add them to the panel to include them, or ignore.
+                          </p>
+                        </div>
+                      ) : null}
+
+                      {/* Per-judge breakdown for this team's panel */}
+                      <div className="mb-3 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--surface))] p-3">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+                          Panel {t.department ? `· ${t.department}` : ''}
+                        </p>
+                        {t.judges && t.judges.length > 0 ? (
+                          <div className="mt-2 space-y-1.5">
+                            {t.judges.map((j) => (
+                              <div key={j.position} className="flex items-center justify-between gap-2 text-xs">
+                                <span className="min-w-0 truncate text-ink-700">
+                                  <span className="font-semibold text-ink-500">Judge {j.position}:</span>{' '}
+                                  {j.name || j.uid}
+                                </span>
+                                {j.submitted ? (
+                                  <span className="shrink-0 font-mono font-bold text-ink-900">
+                                    {typeof j.scorePct === 'number' ? `${j.scorePct}%` : 'submitted'}
+                                  </span>
+                                ) : (
+                                  <span className="shrink-0 text-amber-700">
+                                    {j.state === 'in-progress' ? 'in progress' : 'not started'}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-xs text-ink-500">{t.message}</p>
+                        )}
+                        <p className="mt-2 border-t border-[rgb(var(--border))] pt-2 text-xs text-ink-600">
+                          {t.isFinal ? (
+                            <>Final score <strong className="text-ink-900">{t.finalScore}%</strong> — {t.message}</>
+                          ) : (
+                            t.message
+                          )}
+                        </p>
+                      </div>
+
                       {detail?.loading ? (
                         <p className="text-xs text-ink-400">Loading team members…</p>
                       ) : detail && detail.members.length > 0 ? (
@@ -833,6 +1191,19 @@ export function AdminJuryPage() {
                 statement. The count shows how many registered teams fall in each department.
               </p>
 
+              {/* Access here is NOT panel membership — only panel judges count toward
+                  the averaged final score. Warn so scores aren't silently discarded. */}
+              <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
+                <span className="mt-0.5 shrink-0 font-bold">!</span>
+                <p>
+                  <strong>This grants access only — it does not build a panel.</strong> A judge added
+                  here can score teams, but their score is <strong>excluded from the team&apos;s
+                  averaged final score</strong> unless they are also on that department&apos;s panel.
+                  Use <strong>Jury panels (by department)</strong> at the top of this page to set who
+                  actually counts.
+                </p>
+              </div>
+
               <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
                 {DEPARTMENTS.map((dept) => {
                   const assigned = Array.isArray(selectedJudge?.assignedDepartments) && selectedJudge.assignedDepartments.includes(dept)
@@ -919,6 +1290,19 @@ export function AdminJuryPage() {
                 Assign this judge directly to specific teams. The judge can then evaluate those teams
                 regardless of problem statement or domain/track. Changes save immediately.
               </p>
+
+              {/* 2-judge panels are a DEPARTMENT feature — direct team assignment is
+                  deliberately limited to a single judge per team, so it cannot be used
+                  to build a panel. Warn before the admin discovers this via a 409. */}
+              <div className="flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-900">
+                <span className="mt-0.5 shrink-0 font-bold">!</span>
+                <p>
+                  <strong>One judge per team only.</strong> Direct team assignment does not support
+                  2-judge panels — a second judge will be rejected, and teams assigned this way get
+                  no averaged final score. To have two judges score the same team, use{' '}
+                  <strong>Jury panels (by department)</strong> above instead.
+                </p>
+              </div>
 
               <label className="flex w-fit cursor-pointer items-center gap-2 text-sm text-ink-700">
                 <input

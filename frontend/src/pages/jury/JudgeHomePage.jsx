@@ -17,6 +17,12 @@ export function JudgeHomePage() {
   const { teams, problems, edition, loading, error } = useJuryAssignments()
   const { items: announcements, loading: annLoading } = useAnnouncements(6, { eventId, juryFeed: true })
 
+  // Panel context: teams whose final score is still waiting on a co-judge, and
+  // teams whose panel is complete (final score calculated).
+  const panelTeams = teams.filter((t) => t.panel && t.panel.expectedCount > 1)
+  const panelWaiting = panelTeams.filter((t) => !t.panel.isFinal).length
+  const panelFinal = panelTeams.filter((t) => t.panel.isFinal).length
+
   const pending = teams.filter((t) => deriveJuryEvalUiStatus(t.myEvaluation) === 'pending').length
   const inProg = teams.filter((t) => deriveJuryEvalUiStatus(t.myEvaluation) === 'in-progress').length
   const done = teams.filter((t) => deriveJuryEvalUiStatus(t.myEvaluation) === 'submitted').length
@@ -87,6 +93,26 @@ export function JudgeHomePage() {
           {locked > 0 ? <p className="mt-1 text-xs text-ink-500">{locked} locked</p> : null}
         </Card>
       </div>
+
+      {/* Panel summary — only meaningful when this judge shares a panel with others. */}
+      {panelTeams.length > 0 ? (
+        <Card className="border-amber-500/20 bg-amber-500/[0.03]">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-display text-base font-semibold text-ink-900">Shared judge panel</h2>
+              <p className="mt-1 max-w-2xl text-sm text-ink-600">
+                You share a panel with another judge on {panelTeams.length} team(s). Each team&apos;s final
+                score is the <strong>average of all panel judges</strong> and is only calculated once
+                everyone has submitted.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Badge tone="success">{panelFinal} final</Badge>
+              <Badge tone="warn">{panelWaiting} awaiting a judge</Badge>
+            </div>
+          </div>
+        </Card>
+      ) : null}
 
       <div className="grid gap-6 lg:grid-cols-2">
         <Card>

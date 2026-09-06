@@ -14,6 +14,7 @@ import {
   CheckCircle2,
   Zap,
   Sparkles,
+  Users as UsersIcon,
 } from 'lucide-react'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
 import { useApi } from '@/hooks/useApi.js'
@@ -174,6 +175,78 @@ function StepStrip({ steps, position }) {
   )
 }
 
+/**
+ * Department jury panel status.
+ *
+ * Shows who else is scoring this team and how far along they are. The team's
+ * FINAL score is the average of every panel judge and only appears once all of
+ * them have submitted — until then this shows "x of y submitted". A co-judge's
+ * score is never sent by the server before the panel is complete, so it cannot
+ * influence the judge who is still scoring.
+ */
+function PanelStatus({ panel }) {
+  if (!panel || panel.expectedCount === 0) return null
+  const { expectedCount, submittedCount, isFinal, finalScore, judges, message } = panel
+  const solo = expectedCount === 1
+
+  return (
+    <div
+      className={`mt-4 rounded-xl border p-3.5 ${
+        isFinal ? 'border-emerald-500/40 bg-emerald-500/5' : 'border-amber-500/30 bg-amber-500/5'
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <p className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-ink-500">
+          <UsersIcon className="h-3.5 w-3.5" />
+          {solo ? 'Single-judge panel' : `Judge panel · ${expectedCount} judges`}
+        </p>
+        {isFinal ? (
+          <Badge tone="success" className="text-[10px]">Complete</Badge>
+        ) : (
+          <Badge tone="warn" className="text-[10px]">{submittedCount}/{expectedCount} submitted</Badge>
+        )}
+      </div>
+
+      <div className="mt-2.5 space-y-1.5">
+        {judges.map((j) => (
+          <div key={j.position} className="flex items-center justify-between gap-2 text-xs">
+            <span className="min-w-0 truncate text-ink-700">
+              <span className="font-semibold text-ink-500">Judge {j.position}</span>
+              {j.isMe ? <span className="ml-1 text-brand-600">(you)</span> : j.name ? <span className="ml-1">· {j.name}</span> : null}
+            </span>
+            {j.submitted ? (
+              typeof j.scorePct === 'number' ? (
+                <span className="shrink-0 font-mono font-bold text-ink-900">{j.scorePct}%</span>
+              ) : (
+                <span className="shrink-0 text-emerald-700">submitted</span>
+              )
+            ) : (
+              <span className="shrink-0 text-amber-700">
+                {j.state === 'in-progress' ? 'in progress' : 'not submitted'}
+              </span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {isFinal ? (
+        <div className="mt-3 border-t border-emerald-500/20 pt-2.5">
+          <p className="text-[10px] font-bold uppercase tracking-wide text-ink-500">
+            Team final score {solo ? '' : '(average)'}
+          </p>
+          <p className="mt-0.5 font-display text-2xl font-bold text-emerald-700">
+            {typeof finalScore === 'number' ? `${finalScore}%` : '—'}
+          </p>
+        </div>
+      ) : (
+        <p className="mt-3 border-t border-amber-500/20 pt-2.5 text-[11px] leading-snug text-amber-800">
+          {message}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function JudgeTeamReviewPage() {
   const { teamId } = useParams()
   const api = useApi()
@@ -217,8 +290,9 @@ export function JudgeTeamReviewPage() {
   const [msg, setMsg] = useState('')
   const [saving, setSaving] = useState(false)
   const [lastAutosave, setLastAutosave] = useState(null)
-  const [juryStatus, setJuryStatus] = useState('')
-  const [statusBusy, setStatusBusy] = useState(false)
+  // Department jury panel: co-judges, how many have submitted, and the averaged
+  // final score (the server withholds a co-judge's score until ALL have submitted).
+  const [panel, setPanel] = useState(null)
 
   usePageSeo({ title: 'Team review', description: 'Scoped jury evaluation.' })
 
@@ -231,7 +305,7 @@ export function JudgeTeamReviewPage() {
     try {
       const data = await api.judgeTeamReview(teamId)
       setTeam(data.team)
-      setJuryStatus(data.team?.juryStatus || '')
+      setPanel(data.panel || null)
       setProblemStatement(data.problemStatement)
       setSuperProblemStatement(data.superProblemStatement || null)
       setChallenges(Array.isArray(data.challenges) ? data.challenges : [])
@@ -333,7 +407,6 @@ export function JudgeTeamReviewPage() {
       scores: buildScoresPayload(criteria, scores),
       feedback,
       draft,
-      ...(draft ? {} : { status: juryStatus }),
     }
   }
 
@@ -349,9 +422,7 @@ export function JudgeTeamReviewPage() {
       scores: buildScoresPayload(combinedCrit, isA ? scoresA : scoresB),
       feedback: isA ? feedbackA : feedbackB,
       draft,
-      // Team status is only required/sent with the FINAL (Part B) submission —
-      // that's the point at which the whole evaluation is complete.
-      ...(!draft && !isA ? { status: juryStatus } : {}),
+
     }
   }
 
@@ -381,14 +452,11 @@ export function JudgeTeamReviewPage() {
   async function submitSingleFinal() {
     if (!teamId || !canEditAtAll) return
     setMsg('')
-    if (!juryStatus) {
-      setMsg('Please set the team status (Qualified / Waitlist / Not Qualified) before submitting.')
-      return
-    }
     try {
-      await api.submitEvaluation(buildSinglePayload(false))
+      const res = await api.submitEvaluation(buildSinglePayload(false))
       dirty.current = false
-      setMsg('Evaluation submitted. Thank you.')
+      if (res?.panel) setPanel(res.panel)
+      setMsg(res?.panel?.message || 'Evaluation submitted. Thank you.')
       await load()
     } catch (e) {
       setMsg(e.message || 'Submit failed')
@@ -398,14 +466,15 @@ export function JudgeTeamReviewPage() {
   async function submitPart(part) {
     if (!teamId || !canEditAtAll) return
     setMsg('')
-    if (part === 'B' && !juryStatus) {
-      setMsg('Please set the team status (Qualified / Waitlist / Not Qualified) before submitting Evaluation 2.')
-      return
-    }
     try {
-      await api.submitEvaluation(buildPartPayload(part, false))
+      const res = await api.submitEvaluation(buildPartPayload(part, false))
       dirty.current = false
-      setMsg(part === 'A' ? 'Evaluation 1 submitted. Evaluation 2 is now unlocked.' : 'Evaluation 2 submitted. Final Score computed — thank you.')
+      if (res?.panel) setPanel(res.panel)
+      setMsg(
+        part === 'A'
+          ? 'Evaluation 1 submitted. Evaluation 2 is now unlocked.'
+          : res?.panel?.message || 'Evaluation 2 submitted. Thank you.',
+      )
       await load()
     } catch (e) {
       setMsg(e.message || 'Submit failed')
@@ -430,19 +499,6 @@ export function JudgeTeamReviewPage() {
     }
   }
 
-  async function updateJuryStatus(next) {
-    if (!teamId) return
-    setStatusBusy(true)
-    setMsg('')
-    try {
-      const res = await api.judgeSetTeamStatus({ teamId, status: next || 'none' })
-      setJuryStatus(res?.juryStatus || '')
-    } catch (e) {
-      setMsg(e.message || 'Could not update team status')
-    } finally {
-      setStatusBusy(false)
-    }
-  }
 
   function updateScore(key, value) {
     dirty.current = true
@@ -725,6 +781,9 @@ export function JudgeTeamReviewPage() {
 
             {msg ? <p className="mt-3 text-sm text-brand-700">{msg}</p> : null}
 
+            {/* Panel status: co-judges + the averaged team final score. */}
+            <PanelStatus panel={panel} />
+
             {twoPart ? (
               <div className="mt-4 space-y-6">
                 <p className="text-xs text-ink-500">
@@ -871,30 +930,6 @@ export function JudgeTeamReviewPage() {
                           />
                         </div>
 
-                        {/* Team status — required before this final submission completes the evaluation. */}
-                        <div className="mt-4">
-                          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
-                            Team status <span className="text-red-500">*</span>
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {[['qualified', 'Qualified'], ['waitlist', 'Waitlist'], ['not_qualified', 'Not Qualified']].map(([val, label]) => {
-                              const active = juryStatus === val
-                              return (
-                                <Button
-                                  key={val}
-                                  type="button"
-                                  size="sm"
-                                  variant={active ? 'primary' : 'secondary'}
-                                  disabled={statusBusy || !canEditB}
-                                  onClick={() => updateJuryStatus(active ? '' : val)}
-                                >
-                                  {label}{active ? ' ✓' : ''}
-                                </Button>
-                              )
-                            })}
-                          </div>
-                          <p className="mt-1 text-[11px] text-ink-400">Required before you can submit Evaluation 2.</p>
-                        </div>
                       </>
                     ) : null}
 
@@ -916,29 +951,39 @@ export function JudgeTeamReviewPage() {
                               Back
                             </Button>
                           ) : null}
-                          <Button variant="primary" type="button" disabled={!canEditB || !juryStatus} className="gap-2" onClick={() => submitPart('B')}>
+                          <Button variant="primary" type="button" disabled={!canEditB} className="gap-2" onClick={() => submitPart('B')}>
                             <Send className="h-4 w-4" />
                             Submit Evaluation 2 (final)
                           </Button>
                         </>
                       )}
                     </div>
-                    {canEditB && (!hasChallenge || microStep === 'challenge') && !juryStatus ? (
-                      <p className="mt-2 text-xs text-amber-600">Set the team status above to enable the final submission.</p>
-                    ) : null}
+
                   </div>
                 ) : null}
 
                 {/* Both done */}
                 {activeStep === 'done' ? (
                   <div className="rounded-xl border border-brand-500/30 bg-brand-500/5 p-4">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">Final Score</p>
+                    {/* This is THIS judge's own weighted score. On a multi-judge panel
+                        the team's final score is the average of all panel judges — shown
+                        in the panel block above — so never label this one "final". */}
+                    <p className="text-xs font-semibold uppercase tracking-wide text-ink-500">
+                      Your score
+                    </p>
                     <p className="mt-1 font-display text-3xl font-bold text-brand-700">
                       {evaluation?.finalScorePct != null ? `${evaluation.finalScorePct}%` : '—'}
                     </p>
                     <p className="mt-2 text-[11px] text-ink-500">
                       {labelA}: {totalsA.total} / {totalsA.max} · {labelB}: {totalsB.total} / {totalsB.max}
                     </p>
+                    {panel && panel.expectedCount > 1 ? (
+                      <p className="mt-2 text-[11px] text-ink-500">
+                        {panel.isFinal
+                          ? `Team final score (average of ${panel.expectedCount} judges): ${panel.finalScore}%`
+                          : 'The team\u2019s final score is the average of all panel judges — see the panel status above.'}
+                      </p>
+                    ) : null}
                     {feedbackB ? (
                       <div className="mt-3 border-t border-brand-500/20 pt-2">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-400">
@@ -959,30 +1004,6 @@ export function JudgeTeamReviewPage() {
                   Tab through sliders, type remarks, drafts autosave. Final submit locks your sheet from further edits.
                 </p>
 
-                <div className="mt-4">
-                  <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
-                    Team status <span className="text-red-500">*</span>
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {[['qualified', 'Qualified'], ['waitlist', 'Waitlist'], ['not_qualified', 'Not Qualified']].map(([val, label]) => {
-                      const active = juryStatus === val
-                      return (
-                        <Button
-                          key={val}
-                          type="button"
-                          size="sm"
-                          variant={active ? 'primary' : 'secondary'}
-                          disabled={statusBusy || !canEditAtAll}
-                          onClick={() => updateJuryStatus(active ? '' : val)}
-                        >
-                          {label}{active ? ' ✓' : ''}
-                        </Button>
-                      )
-                    })}
-                  </div>
-                  <p className="mt-1 text-[11px] text-ink-400">Required before you can submit your evaluation.</p>
-                </div>
-
                 <div className="mt-6">
                   <RubricSliders criteria={criteria} scores={scores} onChange={updateScore} canEdit={canEditAtAll} />
                 </div>
@@ -1002,14 +1023,11 @@ export function JudgeTeamReviewPage() {
                     <Save className="h-4 w-4" />
                     Save draft now
                   </Button>
-                  <Button variant="primary" type="button" disabled={!canEditAtAll || !juryStatus} className="gap-2" onClick={submitSingleFinal}>
+                  <Button variant="primary" type="button" disabled={!canEditAtAll} className="gap-2" onClick={submitSingleFinal}>
                     <Send className="h-4 w-4" />
                     Submit final
                   </Button>
                 </div>
-                {canEditAtAll && !juryStatus ? (
-                  <p className="mt-2 text-xs text-amber-600">Set the team status above (Qualified / Waitlist / Not Qualified) to enable submission.</p>
-                ) : null}
               </>
             )}
           </Card>

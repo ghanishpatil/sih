@@ -151,6 +151,13 @@ export function createApi(getToken, getEventId = () => '') {
       authReq('/api/admin/judges/assign-teams-bulk', { method: 'POST', body }),
     getJudgeAssignmentsOverview: () =>
       authReq('/api/admin/judges/assignments-overview'),
+    // Department jury panels: ordered judges (Judge 1, Judge 2, …) + a per-panel
+    // limit. Every panel judge scores each team in that department, and the
+    // team's final score is the average once ALL of them submit.
+    getJudgePanels: () => authReq('/api/admin/judges/panels'),
+    setJudgePanel: (body) => authReq('/api/admin/judges/panels', { method: 'PUT', body }),
+    // Official per-team final score (average of the panel's judges).
+    getTeamFinalScores: () => authReq('/api/admin/team-final-scores'),
     recordTeamPayment: (body) =>
       authReq('/api/admin/record-team-payment', { method: 'POST', body }),
     // BUG FIX #8: Admin endpoint to manually record team registration
@@ -325,8 +332,7 @@ export function createApi(getToken, getEventId = () => '') {
     judgeTeamReview: (teamId) => authReq(`/api/judges/review/${encodeURIComponent(teamId)}`),
     submitEvaluation: (payload) =>
       authReq('/api/judges/evaluations', { method: 'POST', body: payload }),
-    judgeSetTeamStatus: (payload) =>
-      authReq('/api/judges/team-status', { method: 'POST', body: payload }),
+
     mentorAssignments: () => authReq('/api/mentors/assignments'),
     mentorNote: (payload) =>
       authReq('/api/mentors/notes', { method: 'POST', body: payload }),

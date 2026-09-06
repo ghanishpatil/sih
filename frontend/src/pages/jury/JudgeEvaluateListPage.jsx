@@ -86,10 +86,28 @@ export function JudgeEvaluateListPage() {
                 <Card className="flex flex-wrap items-center justify-between gap-4">
                   <div>
                     <p className="font-display font-semibold text-ink-900">{t.name}</p>
-                    <p className="mt-1 font-mono text-[11px] text-ink-500">{t.problemStatementId || '—'}</p>
-                    <Badge tone={toneForStatus(ui)} className="mt-2 text-[10px]">
-                      {ui}
-                    </Badge>
+                    <p className="mt-1 font-mono text-[11px] text-ink-500">
+                      {t.problemStatementId || '—'}
+                      {t.department ? <span className="ml-2 font-sans">{t.department}</span> : null}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      <Badge tone={toneForStatus(ui)} className="text-[10px]">
+                        {ui}
+                      </Badge>
+                      {/* Panel context: on a multi-judge panel the team's final score is
+                          the average, and only exists once every judge has submitted. */}
+                      {t.panel && t.panel.expectedCount > 1 ? (
+                        t.panel.isFinal ? (
+                          <Badge tone="success" className="text-[10px]">
+                            Final {t.panel.finalScore}%
+                          </Badge>
+                        ) : (
+                          <Badge tone="warn" className="text-[10px]">
+                            Panel {t.panel.submittedCount}/{t.panel.expectedCount} submitted
+                          </Badge>
+                        )
+                      ) : null}
+                    </div>
                   </div>
                   <Link to={`/judge/evaluate/${t.id}`}>
                     <Button size="sm" className="gap-2" type="button">

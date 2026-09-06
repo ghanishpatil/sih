@@ -261,7 +261,9 @@ export function TeamRegistrationForm({ team, user, profile, api, maxTeamSize = 4
                 </select>
               </div>
               <div>
-                <label className={FIELD_LABEL_CLASS}>Department</label>
+                <label className={FIELD_LABEL_CLASS}>
+                  Department <span className="text-red-500">*</span>
+                </label>
                 <select
                   value={m.department}
                   onChange={(e) => update(idx, 'department', e.target.value)}
@@ -275,7 +277,8 @@ export function TeamRegistrationForm({ team, user, profile, api, maxTeamSize = 4
                 </select>
                 {idx === 0 ? (
                   <p className="mt-1.5 text-xs text-ink-500">
-                    The team leader&apos;s department is used as the team&apos;s department (for judge assignment).
+                    <strong>Required.</strong> The team leader&apos;s department becomes the team&apos;s
+                    department — it decides which jury panel evaluates you, so it cannot be left blank.
                   </p>
                 ) : null}
               </div>

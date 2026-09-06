@@ -19,6 +19,7 @@ import { expectedEntryMinorAndCurrency, verifyAndMarkTeamPaid } from '../service
 import { normalizeSubmissionPatch } from '../utils/submissionPatch.js'
 import { assertValidDocId, isValidDocId } from '../utils/sanitize.js'
 import { participationBlockedMessage } from '../services/teamRegistrationGate.js'
+import { JURY_DEPARTMENTS, isValidJuryDepartment } from '../services/juryPanel.js'
 import {
   completeRegistrationPatch,
   deriveRegistrationStatus,
@@ -312,7 +313,16 @@ r.post('/register-team-members', async (req, res, next) => {
       if (!prn) return res.status(400).json({ error: `${label}: PRN number is required.` })
       if (!prnRegex.test(prn)) return res.status(400).json({ error: `${label}: PRN must be 4–30 letters, digits, - or /.` })
       if (!yearOfStudy) return res.status(400).json({ error: `${label}: year of study is required.` })
+      // Department is MANDATORY and must be one of the official list. The team's
+      // department (taken from the leader below) is what puts the team in front of
+      // the right jury panel, so a free-text or blank value would make the team
+      // invisible to its judges.
       if (!department) return res.status(400).json({ error: `${label}: department is required.` })
+      if (!isValidJuryDepartment(department)) {
+        return res.status(400).json({
+          error: `${label}: "${department}" is not a valid department. Choose one of: ${JURY_DEPARTMENTS.join(', ')}`,
+        })
+      }
 
       if (seenEmails.has(email)) return res.status(400).json({ error: `Duplicate email within team: ${email}` })
       if (seenPhones.has(phone)) return res.status(400).json({ error: `Duplicate phone number within team: ${phone}` })

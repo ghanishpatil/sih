@@ -23,6 +23,17 @@ import {
 } from '../services/responseCache.js'
 import { getSihSnapshot, refreshSihSnapshot } from '../services/sihScraper.js'
 import {
+  JURY_DEPARTMENTS,
+  MAX_PANEL_SIZE,
+  DEFAULT_PANEL_LIMIT,
+  isValidJuryDepartment,
+  normalizePanels,
+  getPanel,
+  computeTeamFinalScore,
+  findOffPanelJudges,
+  judgePanelView,
+} from '../services/juryPanel.js'
+import {
   normalizeJudgeScores,
   resolveEvaluationCriteria,
   defaultScoresFromCriteria,
@@ -3131,6 +3142,223 @@ export function adminRouter() {
     }
   })
 
+  // ─── JURY PANELS (department-wise, ordered judges) ────────────────────────
+  // An admin builds a panel per department: a limit (how many judges will sit on
+  // it) plus an ORDERED list of judges (order = the "Judge 1 / Judge 2" label
+  // only). Every judge on the panel scores each team in that department
+  // independently, and the team's final score is the average of their scores —
+  // computed only once ALL panel judges have submitted.
+  //
+  // The panel lives on the event doc (`judgePanels`) and is mirrored onto each
+  // judge's `users/{uid}.assignedDepartments`, so the existing department
+  // scoping used by the judge endpoints keeps working untouched.
+
+  /** GET /admin/judges/panels — panels + judge directory + per-department team counts. */
+  router.get('/judges/panels', async (req, res, next) => {
+    try {
+      const activeEvent = await getActiveEvent()
+      const eventId = String(req.query.eventId || req.eventId || activeEvent?.id || '').trim()
+      const merged = await getActiveEventConfig()
+      const panels = normalizePanels(merged?.judgePanels)
+
+      const judgeSnap = await db().collection('users').where('role', '==', 'judge').limit(300).get()
+      const judges = judgeSnap.docs.map((d) => ({
+        id: d.id,
+        email: d.data().email || '',
+        displayName: d.data().displayName || '',
+        assignedDepartments: Array.isArray(d.data().assignedDepartments) ? d.data().assignedDepartments : [],
+      }))
+
+      // How many teams sit in each department (so admin sees panel workload).
+      let teamQuery = db().collection('teams').limit(2000)
+      if (eventId) teamQuery = teamQuery.where('eventId', '==', eventId)
+      const teamSnap = await teamQuery.get()
+      const teamCounts = {}
+      let teamsWithoutDepartment = 0
+      for (const d of teamSnap.docs) {
+        const dept = String(d.data().department || '').trim()
+        if (!dept) { teamsWithoutDepartment += 1; continue }
+        teamCounts[dept] = (teamCounts[dept] || 0) + 1
+      }
+
+      res.json({
+        eventId: eventId || null,
+        departments: JURY_DEPARTMENTS,
+        maxPanelSize: MAX_PANEL_SIZE,
+        defaultLimit: DEFAULT_PANEL_LIMIT,
+        panels,
+        judges,
+        teamCounts,
+        teamsWithoutDepartment,
+      })
+    } catch (e) {
+      next(e)
+    }
+  })
+
+  /**
+   * PUT /admin/judges/panels — replace one department's panel.
+   * Body: { department, limit, judges: [uid, ...] }  (array order = Judge 1, 2, …)
+   *
+   * Writes the WHOLE judgePanels map (department names contain dots — e.g.
+   * "Integrated B.Tech" — so dotted field paths cannot be used) and syncs the
+   * assignedDepartments mirror for judges added/removed.
+   */
+  router.put('/judges/panels', async (req, res, next) => {
+    try {
+      const body = req.body || {}
+      const department = String(body.department || '').trim()
+      if (!department) return res.status(400).json({ error: 'department required' })
+      if (!isValidJuryDepartment(department)) {
+        return res.status(400).json({ error: `Invalid department. Must be one of: ${JURY_DEPARTMENTS.join(', ')}` })
+      }
+
+      const rawLimit = Number(body.limit)
+      if (!Number.isFinite(rawLimit) || rawLimit < 1 || rawLimit > MAX_PANEL_SIZE) {
+        return res.status(400).json({ error: `limit must be between 1 and ${MAX_PANEL_SIZE}.` })
+      }
+      const limit = Math.floor(rawLimit)
+
+      const judgeIds = Array.isArray(body.judges)
+        ? [...new Set(body.judges.map((v) => String(v || '').trim()).filter(Boolean))]
+        : []
+      if (judgeIds.length > limit) {
+        return res.status(400).json({ error: `This panel allows at most ${limit} judge(s). Raise the limit first.` })
+      }
+      const badId = judgeIds.find((id) => !isValidDocId(id))
+      if (badId) return res.status(400).json({ error: `Invalid judge id: ${badId}` })
+
+      // Every listed user must exist AND still hold the judge role.
+      if (judgeIds.length > 0) {
+        const snaps = await db().getAll(...judgeIds.map((id) => db().doc(`users/${id}`)))
+        for (let i = 0; i < snaps.length; i++) {
+          if (!snaps[i].exists) return res.status(404).json({ error: `Judge not found: ${judgeIds[i]}` })
+          if (snaps[i].data().role !== 'judge') {
+            return res.status(400).json({ error: `${snaps[i].data().email || judgeIds[i]} is not a judge.` })
+          }
+        }
+      }
+
+      const activeEvent = await getActiveEvent()
+      const eventId = activeEvent?.id
+      if (!eventId) return res.status(503).json({ error: 'Hackathon is starting up. Try again in a moment.' })
+      const eventRef = db().doc(`events/${eventId}`)
+
+      let previousJudges = []
+      await db().runTransaction(async (tx) => {
+        const snap = await tx.get(eventRef)
+        const current = normalizePanels(snap.data()?.judgePanels)
+        previousJudges = current[department]?.judges || []
+        const next = { ...current, [department]: { limit, judges: judgeIds } }
+        tx.set(eventRef, { judgePanels: next, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+      })
+
+      // Mirror to users.assignedDepartments so department scoping keeps working.
+      const added = judgeIds.filter((id) => !previousJudges.includes(id))
+      const removed = previousJudges.filter((id) => !judgeIds.includes(id))
+      if (added.length || removed.length) {
+        const batch = db().batch()
+        for (const id of added) {
+          batch.set(
+            db().doc(`users/${id}`),
+            { assignedDepartments: FieldValue.arrayUnion(department), updatedAt: FieldValue.serverTimestamp() },
+            { merge: true },
+          )
+        }
+        for (const id of removed) {
+          batch.set(
+            db().doc(`users/${id}`),
+            { assignedDepartments: FieldValue.arrayRemove(department), updatedAt: FieldValue.serverTimestamp() },
+            { merge: true },
+          )
+        }
+        await batch.commit()
+      }
+
+      invalidateEventCache()
+      await appendAuditLog({
+        actorUid: req.user.uid,
+        action: 'jury.panel_set',
+        targetType: 'event',
+        targetId: eventId,
+        eventId,
+        metadata: { department, limit, judges: judgeIds, added: added.length, removed: removed.length },
+      })
+
+      res.json({ ok: true, department, limit, judges: judgeIds })
+    } catch (e) {
+      next(e)
+    }
+  })
+
+  /**
+   * GET /admin/team-final-scores — the official per-team final score.
+   *
+   * For every team: resolve its department panel, gather that panel's judges'
+   * evaluations, and average them ONCE ALL have submitted. Reads the whole
+   * evaluations collection once and groups in memory (cheaper than per-team
+   * document reads).
+   */
+  router.get('/team-final-scores', async (req, res, next) => {
+    try {
+      const activeEvent = await getActiveEvent()
+      const eventId = String(req.query.eventId || req.eventId || activeEvent?.id || '').trim()
+      const merged = await getActiveEventConfig()
+      const panels = normalizePanels(merged?.judgePanels)
+
+      let teamQuery = db().collection('teams').limit(2000)
+      if (eventId) teamQuery = teamQuery.where('eventId', '==', eventId)
+      const teamSnap = await teamQuery.get()
+
+      const evalSnap = await db().collection('evaluations').limit(5000).get()
+      const byTeam = new Map()
+      for (const d of evalSnap.docs) {
+        const e = d.data()
+        if (!e.teamId || !e.judgeId) continue
+        if (eventId && e.eventId && e.eventId !== eventId) continue
+        if (!byTeam.has(e.teamId)) byTeam.set(e.teamId, {})
+        byTeam.get(e.teamId)[e.judgeId] = e
+      }
+
+      // Judge display names for every judge that sits on a panel.
+      const judgeNames = {}
+      try {
+        const jSnap = await db().collection('users').where('role', '==', 'judge').limit(300).get()
+        for (const d of jSnap.docs) {
+          judgeNames[d.id] = d.data().displayName || d.data().email || d.id
+        }
+      } catch { /* names are cosmetic — proceed without them */ }
+
+      const rows = teamSnap.docs.map((d) => {
+        const t = d.data()
+        const department = String(t.department || '').trim()
+        const panel = department ? panels[department] || null : null
+        const teamEvals = byTeam.get(d.id) || {}
+        const result = computeTeamFinalScore(panel, teamEvals, judgeNames)
+        // Judges who scored this team but are NOT on its panel — their scores are
+        // NOT counted in the average, so admin needs to see them explicitly.
+        const offPanelJudges = findOffPanelJudges(panel, teamEvals, judgeNames)
+        return {
+          teamId: d.id,
+          teamName: t.name || d.id,
+          department,
+          problemStatementId: t.problemStatementId || '',
+          finalist: t.finalist === true,
+          ...result,
+          offPanelJudges,
+        }
+      })
+
+      res.json({
+        eventId: eventId || null,
+        items: rows,
+        offPanelTotal: rows.reduce((n, r) => n + r.offPanelJudges.length, 0),
+      })
+    } catch (e) {
+      next(e)
+    }
+  })
+
   router.post('/record-team-payment', async (req, res, next) => {
     try {
       const { teamId, status } = req.body || {}
@@ -4563,6 +4791,67 @@ export function judgesRouter() {
   }
 
   /**
+   * Resolve the department jury panel for a set of teams and compute each team's
+   * final score (the average of the panel judges' scores, only once ALL of them
+   * have submitted).
+   *
+   * Returns a Map teamId -> panel result already passed through judgePanelView,
+   * so a co-judge's score is withheld until the whole panel is done.
+   */
+  const buildPanelResults = async (merged, teams, myUid) => {
+    const panelByTeam = new Map()
+    const evalRefs = []
+    const seenKeys = new Set()
+    const panelUids = new Set()
+
+    for (const t of teams) {
+      const panel = getPanel(merged, t.department)
+      panelByTeam.set(t.id, panel)
+      for (const juid of panel?.judges || []) {
+        panelUids.add(juid)
+        const key = `${juid}_${t.id}`
+        if (seenKeys.has(key)) continue
+        seenKeys.add(key)
+        evalRefs.push(db().doc(`evaluations/${key}`))
+      }
+    }
+
+    // Batch-read every panel judge's evaluation (chunked — getAll has limits).
+    const evalData = {}
+    if (evalRefs.length > 0) {
+      const chunks = []
+      for (let i = 0; i < evalRefs.length; i += 300) chunks.push(evalRefs.slice(i, i + 300))
+      const results = await Promise.all(chunks.map((c) => db().getAll(...c)))
+      for (const snaps of results) {
+        for (const s of snaps) evalData[s.id] = s.exists ? s.data() : null
+      }
+    }
+
+    // Judge display labels (cosmetic — a failure must not break scoring).
+    const judgeNames = {}
+    if (panelUids.size > 0) {
+      try {
+        const uidList = [...panelUids]
+        const snaps = await db().getAll(...uidList.map((u) => db().doc(`users/${u}`)))
+        for (let i = 0; i < uidList.length; i++) {
+          const d = snaps[i]
+          judgeNames[uidList[i]] = d?.exists ? d.data().displayName || d.data().email || uidList[i] : uidList[i]
+        }
+      } catch { /* ignore */ }
+    }
+
+    const out = new Map()
+    for (const t of teams) {
+      const panel = panelByTeam.get(t.id)
+      const evalsByJudge = {}
+      for (const juid of panel?.judges || []) evalsByJudge[juid] = evalData[`${juid}_${t.id}`] || null
+      const result = computeTeamFinalScore(panel, evalsByJudge, judgeNames)
+      out.set(t.id, judgePanelView(result, myUid))
+    }
+    return out
+  }
+
+  /**
    * Build the judge-facing evaluation detail for a team.
    *
    * `scoringConfig` comes from `resolveScoringConfig()` and is either
@@ -4760,7 +5049,16 @@ export function judgesRouter() {
 
       const evalRefs = teamsFiltered.map((t) => db().doc(`evaluations/${uid}_${t.id}`))
       const evSnaps = evalRefs.length ? await db().getAll(...evalRefs) : []
-      const teams = teamsFiltered.map((t, i) => judgeTeamRow(t.id, t, evalSummaryFromSnap(evSnaps[i])))
+
+      // Department panel context: co-judge submission state + the averaged final
+      // score (withheld until every panel judge has submitted).
+      const panelResults = await buildPanelResults(merged, teamsFiltered, uid)
+
+      const teams = teamsFiltered.map((t, i) => ({
+        ...judgeTeamRow(t.id, t, evalSummaryFromSnap(evSnaps[i])),
+        department: String(t.department || ''),
+        panel: panelResults.get(t.id) || null,
+      }))
 
       res.json({
         problemStatementIds: assigned,
@@ -4917,10 +5215,20 @@ export function judgesRouter() {
       const evSnap = await db().doc(`evaluations/${uid}_${teamId}`).get()
       const evaluation = evaluationDetailFromSnap(evSnap, scoringConfig)
 
-      const team = judgeTeamRow(teamSnap.id, teamRaw, evalSummaryFromSnap(evSnap))
+      const team = {
+        ...judgeTeamRow(teamSnap.id, teamRaw, evalSummaryFromSnap(evSnap)),
+        department: String(teamRaw.department || ''),
+      }
+
+      // Department panel: who else scores this team, how many have submitted, and
+      // the averaged final score once ALL of them have. Peer scores are omitted
+      // by judgePanelView until the panel is complete.
+      const panelResults = await buildPanelResults(merged, [{ id: teamSnap.id, department: teamRaw.department }], uid)
+      const panel = panelResults.get(teamSnap.id) || null
 
       res.json({
         team,
+        panel,
         problemStatement,
         superProblemStatement,
         challenges,
@@ -5029,17 +5337,13 @@ export function judgesRouter() {
         return res.status(e.status || 400).json({ error: e.message })
       }
 
-      // Team status is REQUIRED before the FINAL (second) submission completes
-      // the evaluation. For two-part phases it's only enforced on Part B, since
-      // Part A alone doesn't finish the judge's assessment of the team yet.
-      const VALID_STATUS = new Set(['qualified', 'waitlist', 'not_qualified'])
-      const rawStatus = String(req.body?.status || '').trim().toLowerCase()
-      const providedStatus = VALID_STATUS.has(rawStatus) ? rawStatus : ''
-      const existingStatus = VALID_STATUS.has(team.juryStatus) ? team.juryStatus : ''
-      const statusRequiredNow = !isDraft && (!isTwoPart || requestedPart === 'B')
-      if (statusRequiredNow && !providedStatus && !existingStatus) {
-        return res.status(400).json({ error: 'Set the team status (Qualified / Waitlist / Not Qualified) before submitting.' })
-      }
+      // NOTE: judges no longer set a per-team qualification status (Qualified /
+      // Waitlist / Not Qualified). With a multi-judge department panel that was a
+      // single shared field two judges would overwrite, so the judge's job is now
+      // purely to score. The team's outcome is derived from the panel's averaged
+      // final score, and `juryStatus` remains an ADMIN-only override
+      // (PATCH /admin/teams/:teamId) which still drives public results,
+      // qualified-team emails and Grand Finale check-in.
 
       const evalRef = db().doc(`evaluations/${jid}_${teamId}`)
 
@@ -5200,71 +5504,16 @@ export function judgesRouter() {
         return res.status(409).json({ error: 'Submit Evaluation 1 (first part) before submitting Evaluation 2.' })
       }
 
-      // Persist the team status chosen at submit time (final submissions only,
-      // and only once the WHOLE evaluation is complete — i.e. not on Part A alone).
-      if (statusRequiredNow && providedStatus && providedStatus !== existingStatus) {
-        await db().doc(`teams/${teamId}`).set(
-          { juryStatus: providedStatus, updatedAt: FieldValue.serverTimestamp() },
-          { merge: true },
-        )
-      }
+      // After this submission, recompute the department panel so the response can
+      // tell the judge whether the team's final score is now complete (all panel
+      // judges in) or still waiting on a co-judge.
+      let panelAfter = null
+      try {
+        const results = await buildPanelResults(merged, [{ id: teamId, department: team.department }], jid)
+        panelAfter = results.get(teamId) || null
+      } catch { /* panel context is advisory — never fail the submission */ }
 
-      res.json({ ok: true, finalScorePct: finalScorePctOut })
-    } catch (e) {
-      next(e)
-    }
-  })
-
-  /**
-   * Judge sets a team's qualification status: qualified | waitlist | not_qualified
-   * (or '' / 'none' to clear). Only judges assigned to the team may set it. The
-   * admin views these statuses read-only in Jury Management.
-   */
-  router.post('/team-status', async (req, res, next) => {
-    try {
-      const { teamId } = req.body || {}
-      const rawStatus = String(req.body?.status || '').trim().toLowerCase()
-      if (!teamId || typeof teamId !== 'string' || teamId.length > 128 || /[\/.\\#$[\]]/.test(teamId)) {
-        return res.status(400).json({ error: 'Invalid teamId.' })
-      }
-      const VALID = new Set(['qualified', 'waitlist', 'not_qualified'])
-      const clearing = rawStatus === '' || rawStatus === 'none'
-      if (!clearing && !VALID.has(rawStatus)) {
-        return res.status(400).json({ error: 'status must be qualified, waitlist, not_qualified, or none.' })
-      }
-
-      const teamSnap = await db().doc(`teams/${teamId}`).get()
-      if (!teamSnap.exists) return res.status(404).json({ error: 'Team not found' })
-      const team = teamSnap.data()
-
-      if (req.eventId && team.eventId && team.eventId !== req.eventId) {
-        return res.status(403).json({ error: 'Team is outside your active event edition.' })
-      }
-
-      // Access: direct team assignment, department match, direct PS, or domain+track match.
-      let allowed = (Array.isArray(team.judgeIds) && team.judgeIds.includes(req.user.uid))
-        || judgeDeptAllows(req.profile, team)
-        || judgeMayEvaluateTeam(req.profile, team)
-      if (!allowed) {
-        const judgeAssignments = Array.isArray(req.profile?.judgeAssignments) ? req.profile.judgeAssignments : []
-        if (judgeAssignments.length > 0 && team.problemStatementId) {
-          const psSnap = await db().doc(`problemStatements/${team.problemStatementId}`).get()
-          if (psSnap.exists) {
-            const pd = psSnap.data()
-            const psDomain = pd.theme || pd.domain || ''
-            const psTrack = pd.category || ''
-            allowed = judgeAssignments.some((ja) => (!ja.domain || psDomain === ja.domain) && (!ja.track || psTrack === ja.track))
-          }
-        }
-      }
-      if (!allowed) return res.status(403).json({ error: 'You are not assigned to this team.' })
-
-      await db().doc(`teams/${teamId}`).set({
-        juryStatus: clearing ? FieldValue.delete() : rawStatus,
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true })
-
-      res.json({ ok: true, juryStatus: clearing ? '' : rawStatus })
+      res.json({ ok: true, finalScorePct: finalScorePctOut, panel: panelAfter })
     } catch (e) {
       next(e)
     }
