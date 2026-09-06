@@ -6,7 +6,6 @@ const footerLinks = {
   platform: [
     { to: '/about', label: 'About SKH' },
     { to: '/problems', label: 'Problem Bank' },
-    { to: '/timeline', label: 'Event Timeline' },
     { to: '/announcements', label: 'Announcements' },
     { to: '/faq', label: 'FAQ' },
   ],

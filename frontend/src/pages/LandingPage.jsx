@@ -8,7 +8,6 @@ import { TracksSection } from '@/components/home/TracksSection.jsx'
 import { UniversitySection } from '@/components/home/UniversitySection.jsx'
 import { PatronsSection } from '@/components/home/PatronsSection.jsx'
 import { CollaborationSection } from '@/components/home/CollaborationSection.jsx'
-import { TimelineSection } from '@/components/home/TimelineSection.jsx'
 import { AnnouncementsPreview } from '@/components/home/AnnouncementsPreview.jsx'
 import { SponsorsSection } from '@/components/home/SponsorsSection.jsx'
 import { FAQSection } from '@/components/home/FAQSection.jsx'
@@ -51,13 +50,6 @@ export function LandingPage() {
         <div className="pointer-events-none absolute -right-20 bottom-0 h-80 w-80 rounded-full bg-indigo-500/20 blur-[80px]" aria-hidden />
         <div className="pointer-events-none absolute -right-20 top-0 h-56 w-56 rounded-full bg-brand-400/15 blur-[60px]" aria-hidden />
         <CollaborationSection />
-      </div>
-
-      {/* ── TimelineSection with left-edge blob ── */}
-      <div className="relative">
-        <div className="pointer-events-none absolute -left-20 top-1/3 h-72 w-72 rounded-full bg-brand-500/20 blur-[70px]" aria-hidden />
-        <div className="pointer-events-none absolute -left-16 bottom-0 h-56 w-56 rounded-full bg-cyan-400/15 blur-[60px]" aria-hidden />
-        <TimelineSection />
       </div>
 
       {/* ── AnnouncementsPreview with right-edge blob ── */}

@@ -12,7 +12,6 @@ import {
   createUserWithEmailAndPassword,
   deleteUser,
   onAuthStateChanged,
-  sendEmailVerification,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -210,8 +209,6 @@ export function AuthProvider({ children }) {
 
       // Registration fully complete — now allow the app to treat user as logged in
       registrationInProgress.current = false
-      // Send email verification (one-time, non-blocking)
-      try { await sendEmailVerification(cred.user) } catch { /* ignore — user can resend */ }
       // Manually trigger the auth state update since we suppressed onAuthStateChanged
       setUser(cred.user)
       const profile = fromApi || await ensureUserProfile(cred.user, displayName)
@@ -296,11 +293,6 @@ export function AuthProvider({ children }) {
     [user, refreshProfile],
   )
 
-  const resendVerification = useCallback(async () => {
-    if (!user || user.emailVerified) return
-    await sendEmailVerification(user)
-  }, [user])
-
   const value = useMemo(
     () => ({
       user,
@@ -308,14 +300,12 @@ export function AuthProvider({ children }) {
       loading,
       error,
       firebaseReady: isFirebaseConfigured() && Boolean(auth && db),
-      emailVerified: !user || user.emailVerified || user.providerData?.some((p) => p.providerId === 'google.com'),
       register,
       login,
       loginGoogle,
       logout,
       refreshProfile,
       updateUserProfile,
-      resendVerification,
     }),
     [
       user,
@@ -328,7 +318,6 @@ export function AuthProvider({ children }) {
       logout,
       refreshProfile,
       updateUserProfile,
-      resendVerification,
     ],
   )
 

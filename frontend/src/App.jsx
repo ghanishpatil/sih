@@ -15,7 +15,6 @@ import { AuthPage } from '@/pages/AuthPage.jsx'
 import { ChangePasswordPage } from '@/pages/ChangePasswordPage.jsx'
 import { AnnouncementsPage } from '@/pages/AnnouncementsPage.jsx'
 import { TeamPage } from '@/pages/TeamPage.jsx'
-import { TimelinePage } from '@/pages/TimelinePage.jsx'
 import { SponsorsPage } from '@/pages/SponsorsPage.jsx'
 import { FAQPage } from '@/pages/FAQPage.jsx'
 import { ResultsPage } from '@/pages/ResultsPage.jsx'
@@ -116,12 +115,6 @@ const AdminSearchPage = lazy(() =>
 const AdminChatsPage = lazy(() =>
   import('@/pages/admin/AdminChatsPage.jsx').then((m) => ({ default: m.AdminChatsPage })),
 )
-const AdminShortlistingPage = lazy(() =>
-  import('@/pages/admin/AdminShortlistingPage.jsx').then((m) => ({ default: m.AdminShortlistingPage })),
-)
-const AdminPhasesPage = lazy(() =>
-  import('@/pages/admin/AdminPhasesPage.jsx').then((m) => ({ default: m.AdminPhasesPage })),
-)
 const AdminAnnouncementsPage = lazy(() =>
   import('@/pages/admin/AdminAnnouncementsPage.jsx').then((m) => ({ default: m.AdminAnnouncementsPage })),
 )
@@ -148,9 +141,6 @@ const AdminSecurityPage = lazy(() =>
 )
 const AdminTutorialPage = lazy(() =>
   import('@/pages/admin/AdminTutorialPage.jsx').then((m) => ({ default: m.AdminTutorialPage })),
-)
-const AdminTimelinePage = lazy(() =>
-  import('@/pages/admin/AdminTimelinePage.jsx').then((m) => ({ default: m.AdminTimelinePage })),
 )
 const AdminSponsorsPage = lazy(() =>
   import('@/pages/admin/AdminSponsorsPage.jsx').then((m) => ({ default: m.AdminSponsorsPage })),
@@ -306,14 +296,7 @@ export default function App() {
               </AnimatedOutlet>
             }
           />
-          <Route
-            path="/timeline"
-            element={
-              <AnimatedOutlet>
-                <TimelinePage />
-              </AnimatedOutlet>
-            }
-          />
+
           <Route
             path="/sponsors"
             element={
@@ -424,13 +407,11 @@ export default function App() {
             <Route path="/admin/finalists" element={<AdminFinalistsPage />} />
             <Route path="/admin/finals-evaluations" element={<AdminFinalsEvaluationsPage />} />
             <Route path="/admin/chats" element={<AdminChatsPage />} />
-            <Route path="/admin/shortlisting" element={<AdminShortlistingPage />} />
-            <Route path="/admin/phases" element={<AdminPhasesPage />} />
+
             <Route path="/admin/announcements" element={<AdminAnnouncementsPage />} />
             <Route path="/admin/reports" element={<AdminReportsPage />} />
             <Route path="/admin/access" element={<AdminAccessPage />} />
             <Route path="/admin/audit" element={<AdminAuditPage />} />
-            <Route path="/admin/timeline" element={<AdminTimelinePage />} />
             <Route path="/admin/sponsors" element={<AdminSponsorsPage />} />
             <Route path="/admin/hero" element={<AdminHeroPage />} />
             <Route path="/admin/registration-desk" element={<AdminRegistrationDeskPage />} />

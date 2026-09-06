@@ -29,7 +29,6 @@ import { Card, GlassCard } from '@/components/ui/Card.jsx'
 import { Button } from '@/components/ui/Button.jsx'
 import { Badge } from '@/components/ui/Badge.jsx'
 import { Skeleton } from '@/components/ui/Skeleton.jsx'
-import { PhaseProgressTimeline } from '@/components/participant/PhaseProgressTimeline.jsx'
 import { buildParticipantSteps, submissionCompleteness } from '@/pages/dashboard/participant/progressUtils.js'
 
 /** Animated circular progress ring */
@@ -221,12 +220,7 @@ export function ParticipantHomePage() {
 
       {error && <p className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-700">{error}</p>}
 
-      {/* ━━ Phase Timeline ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
-      {eventCfg?.competitionPhases?.length > 0 && (
-        <motion.div variants={fadeUp}>
-          <PhaseProgressTimeline phases={eventCfg.competitionPhases} team={team} />
-        </motion.div>
-      )}
+
 
       {/* ━━ Bento Grid ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

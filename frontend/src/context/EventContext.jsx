@@ -2,7 +2,6 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db, isFirebaseConfigured } from '@/firebase/client.js'
 import { publicApi } from '@/services/api.js'
-import { getActivePhase } from '@/utils/phaseStatus.js'
 
 const EventContext = createContext(null)
 
@@ -46,7 +45,6 @@ export function EventProvider({ children }) {
         apiFieldsRef.current = {
           razorpayConfigured: cfg.razorpayConfigured,
           razorpayKeyId: cfg.razorpayKeyId,
-          activePhase: cfg.activePhase,
         }
         setEventCfg(cfg)
       })
@@ -68,10 +66,6 @@ export function EventProvider({ children }) {
         if (!snap.exists()) return
         const data = snap.data()
 
-        // Recompute activePhase from the fresh snapshot data
-        const phases = Array.isArray(data.competitionPhases) ? data.competitionPhases : []
-        const activePhase = getActivePhase(phases)
-
         setEventCfg((prev) => ({
           // Keep API-computed fields that Firestore doesn't have
           razorpayConfigured: apiFieldsRef.current.razorpayConfigured ?? prev?.razorpayConfigured,
@@ -91,8 +85,6 @@ export function EventProvider({ children }) {
           registrationOpensAt: data.registrationOpensAt?.toDate?.()?.toISOString() ?? data.registrationOpensAt ?? prev?.registrationOpensAt ?? null,
           registrationClosesAt: data.registrationClosesAt?.toDate?.()?.toISOString() ?? data.registrationClosesAt ?? prev?.registrationClosesAt ?? null,
           submissionDeadline: data.submissionDeadline?.toDate?.()?.toISOString() ?? data.submissionDeadline ?? prev?.submissionDeadline ?? null,
-          competitionPhases: phases,
-          activePhase,
         }))
       },
       () => { /* ignore snapshot errors — API data is still available */ },

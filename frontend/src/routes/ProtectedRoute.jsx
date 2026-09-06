@@ -33,10 +33,9 @@ export function ProtectedRoute({ roles }) {
     return <Navigate to="/auth" replace state={{ from: location.pathname }} />
   }
 
-  // First-login gate: force password change before accessing anything else.
-  if (profile?.mustChangePassword === true && location.pathname !== '/change-password') {
-    return <Navigate to="/change-password" replace />
-  }
+  // Invited users log in directly with their emailed credentials — no forced
+  // first-login password change gate. Voluntary change is still available at
+  // /change-password if a user navigates there.
 
   const r = profile?.role || 'participant'
   if (roles?.length && !canAccess(r, roles)) {

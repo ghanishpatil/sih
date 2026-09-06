@@ -12,7 +12,6 @@ import { Badge } from '@/components/ui/Badge.jsx'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
 import { useApi } from '@/hooks/useApi.js'
 import { submissionCompleteness } from '@/pages/dashboard/participant/progressUtils.js'
-import { isPhaseSubmissionOpen, phaseAcceptsSubmissions } from '@/utils/phaseStatus.js'
 
 const MAX_PPT_BYTES = 35 * 1024 * 1024
 const MAX_PDF_BYTES = 35 * 1024 * 1024
@@ -58,9 +57,6 @@ export function SubmissionPage() {
 
   const teamId = profile?.teamId
 
-  // Derive phase data directly from live eventCfg — no separate fetch needed
-  const activePhase = eventCfg?.activePhase || null
-  const phases = Array.isArray(eventCfg?.competitionPhases) ? eventCfg.competitionPhases : []
   const deadlineLabel = eventCfg?.submissionDeadline
     ? new Date(eventCfg.submissionDeadline).toLocaleString()
     : ''
@@ -127,27 +123,15 @@ export function SubmissionPage() {
   const locked = finalsMode ? finalsLocked : teamLocked
   const progress = submissionCompleteness(sub)
 
-  // Phase-aware logic
-  const isPhase1 = activePhase && phases.find((p) => p.id === activePhase.id)?.order === 1
-  const teamShortlistedPhases = teamData?.shortlistedPhases || []
-  const teamCanAccessActivePhase = finalsMode
-    ? isFinalist
-    : (!activePhase || isPhase1 || teamShortlistedPhases.includes(activePhase.id))
-  // Phase is open if backend would accept a submission. Shared helper keeps this
-  // consistent with backend isPhaseSubmissionOpen()/canTeamSubmit() so the UI
-  // doesn't grey out uploads while the phase is genuinely open.
-  // A phase with no required artifacts (e.g. registration / problem-statements
-  // phase) is NOT a submission phase — the Submission Center stays closed.
-  const activePhaseIsSubmission = !activePhase || phaseAcceptsSubmissions(activePhase)
-  // In finals mode an active, submission-accepting phase is REQUIRED (the finals
-  // window). Outside finals, "no active phase" falls back to event-level flags.
-  const phaseSubmissionsOpen = finalsMode
-    ? Boolean(activePhase && isPhaseSubmissionOpen(activePhase) && activePhaseIsSubmission)
-    : (!activePhase || (isPhaseSubmissionOpen(activePhase) && activePhaseIsSubmission))
-  const phaseDeadlinePassed = activePhase?.deadline && new Date(activePhase.deadline).getTime() < Date.now()
-  const phaseRequirements = activePhase
-    ? (activePhase.requirements || { pptRequired: false, pdfRequired: false, videoRequired: false, githubRequired: false, deployedUrlRequired: false })
-    : { pptRequired: true, pdfRequired: true, videoRequired: false, githubRequired: false, deployedUrlRequired: false }
+  // Schedule-based gating: submissions are open when the event's `submissionsOpen`
+  // flag is on AND the submissionDeadline has not passed. Finals additionally
+  // require the team to be a selected finalist.
+  const phaseDeadlinePassed = Boolean(
+    eventCfg?.submissionDeadline && new Date(eventCfg.submissionDeadline).getTime() < Date.now(),
+  )
+  const teamCanAccessActivePhase = finalsMode ? isFinalist : true
+  const phaseSubmissionsOpen = Boolean(eventCfg?.submissionsOpen) && !phaseDeadlinePassed
+  const phaseRequirements = { pptRequired: true, pdfRequired: true, videoRequired: false, githubRequired: false, deployedUrlRequired: false }
   
   // Check if payment is pending (Phase 3: Pay Later flow)
   const paymentPending = teamData && 
@@ -167,12 +151,12 @@ export function SubmissionPage() {
     // BUG-5 FIX: Validate phase gate before starting the Storage upload.
     // Without this, the file uploads to Storage even when the phase is closed,
     // and only the metadata write is blocked — leaving orphaned files in Storage.
-    if (activePhase && (!phaseSubmissionsOpen || phaseDeadlinePassed)) {
-      setStatus('Submissions are not open for the current phase.')
+    if (!phaseSubmissionsOpen || phaseDeadlinePassed) {
+      setStatus('Submissions are not open right now.')
       return
     }
-    if (activePhase && !teamCanAccessActivePhase) {
-      setStatus('Your team is not shortlisted for this phase.')
+    if (!teamCanAccessActivePhase) {
+      setStatus('Only selected finalists can submit in the finals round.')
       return
     }
     const err = assertFile(kind, file)
@@ -211,12 +195,12 @@ export function SubmissionPage() {
       setStatus('Submission is locked.')
       return
     }
-    if (activePhase && (!phaseSubmissionsOpen || phaseDeadlinePassed)) {
-      setStatus('Submissions are not open for the current phase.')
+    if (!phaseSubmissionsOpen || phaseDeadlinePassed) {
+      setStatus('Submissions are not open right now.')
       return
     }
-    if (activePhase && !teamCanAccessActivePhase) {
-      setStatus('Your team is not shortlisted for this phase.')
+    if (!teamCanAccessActivePhase) {
+      setStatus('Only selected finalists can submit in the finals round.')
       return
     }
     setStatus('')
@@ -234,12 +218,12 @@ export function SubmissionPage() {
   async function saveVideoLink() {
     if (!teamId || !user) return
     if (locked) { setStatus('Submission is locked.'); return }
-    if (activePhase && (!phaseSubmissionsOpen || phaseDeadlinePassed)) {
-      setStatus('Submissions are not open for the current phase.')
+    if (!phaseSubmissionsOpen || phaseDeadlinePassed) {
+      setStatus('Submissions are not open right now.')
       return
     }
-    if (activePhase && !teamCanAccessActivePhase) {
-      setStatus('Your team is not shortlisted for this phase.')
+    if (!teamCanAccessActivePhase) {
+      setStatus('Only selected finalists can submit in the finals round.')
       return
     }
     const trimmed = videoUrl.trim()
@@ -337,7 +321,7 @@ export function SubmissionPage() {
           </Link>
           <h1 className="mt-3 font-display text-3xl font-extrabold text-ink-900 sm:text-4xl">Submission Center</h1>
           <p className="mt-2 max-w-lg text-sm text-ink-500">
-            Upload your files for the current competition phase. Required artifacts are marked below.
+            Upload your submission files below. Required artifacts are marked.
           </p>
 
           {/* Status chips */}
@@ -366,48 +350,33 @@ export function SubmissionPage() {
             </div>
           ) : null}
 
-          {/* Phase info */}
-          {activePhase && (
+          {/* Submission window status */}
+          {!finalsMode ? (
             <div className={`mt-5 rounded-2xl border p-4 ${
-              !teamCanAccessActivePhase ? 'border-red-500/30 bg-red-500/5' :
-              !phaseSubmissionsOpen || phaseDeadlinePassed ? 'border-amber-500/30 bg-amber-500/5' :
-              'border-emerald-500/30 bg-emerald-500/5'
+              phaseSubmissionsOpen ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-amber-500/30 bg-amber-500/5'
             }`}>
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-500">Current Phase</p>
-                  <h2 className="mt-0.5 font-display text-lg font-bold text-ink-900">{activePhase.name}</h2>
-                  {activePhase.description && <p className="mt-0.5 text-xs text-ink-600">{activePhase.description}</p>}
+                  <p className="text-[11px] font-bold uppercase tracking-widest text-ink-500">Submission window</p>
+                  <h2 className="mt-0.5 font-display text-lg font-bold text-ink-900">
+                    {phaseSubmissionsOpen ? 'Submissions are open' : phaseDeadlinePassed ? 'Deadline has passed' : 'Submissions are closed'}
+                  </h2>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  {phaseSubmissionsOpen && !phaseDeadlinePassed ? (
-                    <Badge tone="success" dot pulse>Submissions Open</Badge>
+                  {phaseSubmissionsOpen ? (
+                    <Badge tone="success" dot pulse>Open</Badge>
                   ) : phaseDeadlinePassed ? (
                     <Badge tone="danger" dot>Deadline Passed</Badge>
-                  ) : !activePhaseIsSubmission ? (
-                    <Badge tone="warn" dot>No Submission Yet</Badge>
                   ) : (
                     <Badge tone="warn" dot>Closed</Badge>
                   )}
-                  {teamCanAccessActivePhase ? (
-                    <Badge tone="brand">Eligible</Badge>
-                  ) : (
-                    <Badge tone="danger">Not Shortlisted</Badge>
-                  )}
                 </div>
               </div>
-              {activePhase.deadline && (
-                <p className="mt-2 text-xs font-medium text-ink-600">
-                  Deadline: {new Date(activePhase.deadline).toLocaleString()}
-                </p>
-              )}
-              {!teamCanAccessActivePhase && (
-                <p className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-xs text-red-700">
-                  Your team is not shortlisted for this phase.
-                </p>
+              {deadlineLabel && (
+                <p className="mt-2 text-xs font-medium text-ink-600">Deadline: {deadlineLabel}</p>
               )}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
 

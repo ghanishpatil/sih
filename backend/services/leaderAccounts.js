@@ -27,7 +27,8 @@ function isValidEmail(email) {
 
 /**
  * Create (or reuse) a Firebase Auth user for a leader email, set a temp password,
- * mark mustChangePassword, ensure a Firestore profile, and email credentials.
+ * ensure a Firestore profile, and email credentials. Users log in directly with
+ * these credentials — no forced first-login password change.
  * Idempotent-ish: if the user already exists it is SKIPPED (not overwritten).
  */
 const ROLE_META = {
@@ -81,7 +82,9 @@ export async function inviteLeader(rawEmail, role = 'participant') {
     role: roleKey,
     teamId: '',
     activeEventId: activeEvent?.id || '',
-    mustChangePassword: true,
+    // Invited users log in directly with the emailed credentials — no forced
+    // first-login password change. (Voluntary change/reset still available.)
+    mustChangePassword: false,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   }

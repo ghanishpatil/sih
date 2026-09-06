@@ -60,10 +60,6 @@ export function ParticipantTeamPage() {
   const formationClosed = (() => {
     if (!eventCfg) return false
     if (eventCfg.lifecyclePhase === 'ARCHIVED') return true
-    const phases = Array.isArray(eventCfg.competitionPhases) ? eventCfg.competitionPhases : []
-    if (phases.length > 0) {
-      return !phases.some(p => ['DRAFT', 'UPCOMING', 'ACTIVE', 'SUBMISSION_LOCKED', 'EVALUATION', 'SHORTLISTING'].includes(p.status))
-    }
     if (eventCfg.submissionDeadline) {
       return new Date(eventCfg.submissionDeadline).getTime() < Date.now()
     }

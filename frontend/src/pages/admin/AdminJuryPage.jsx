@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CheckSquare, Square, Tag, BookOpen, Users, Search, ChevronDown, ChevronRight, Upload, Download } from 'lucide-react'
+import { CheckSquare, Square, Tag, Layers, BookOpen, Users, Search, ChevronDown, ChevronRight, Upload, Download } from 'lucide-react'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
 import { useApi } from '@/hooks/useApi.js'
 import { useEvent } from '@/context/EventContext.jsx'
@@ -12,6 +12,7 @@ import {
   displayTheme,
 } from '@/utils/problemStatementDisplay.js'
 import { ROLES } from '@/utils/roles.js'
+import { PS_THEMES, PS_CATEGORIES } from '@/utils/constants.js'
 import { Card } from '@/components/ui/Card.jsx'
 import { Button } from '@/components/ui/Button.jsx'
 import { Badge } from '@/components/ui/Badge.jsx'
@@ -43,18 +44,15 @@ function parseTeamNameList(text) {
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const DOMAINS = [
-  'Health',
-  'Education',
-  'Transportation',
-  'Food Safety & Security',
-  'Waste Management',
-  'Agriculture',
-  'Industry & MSME Innovation',
-  'Open Innovation',
-]
+const DOMAINS = PS_THEMES
+const TRACKS = PS_CATEGORIES
 
-const TRACKS = ['Software', 'Hardware']
+// Departments — mirrors the participant registration form. A judge assigned to a
+// department evaluates every team whose (leader's) department matches.
+const DEPARTMENTS = [
+  'Cyber Security', 'AIDS', 'AIML', 'CSE', 'Mechanical', 'MCA', 'BCA',
+  'Integrated B.Tech', 'Integrated M.Tech', 'BBA', 'BCOM', 'MBA', 'B.SC', 'M.SC',
+]
 
 // Team qualification statuses (set by judges, viewed by admin).
 const JURY_STATUS_TONE = { qualified: 'success', waitlist: 'warn', not_qualified: 'danger' }
@@ -285,6 +283,29 @@ export function AdminJuryPage() {
     }
   }
 
+  // ── Department assignment ──────────────────────────────────────────────────
+
+  async function toggleDepartment(dept) {
+    if (!judgeId) return
+    setMsg('')
+    setSaving(true)
+    const assigned = Array.isArray(selectedJudge?.assignedDepartments) && selectedJudge.assignedDepartments.includes(dept)
+    try {
+      if (assigned) {
+        await api.unassignJudgeDepartment({ judgeId, department: dept })
+        setMsg(`Removed department: ${dept}`)
+      } else {
+        await api.assignJudgeDepartment({ judgeId, department: dept })
+        setMsg(`Assigned department: ${dept}`)
+      }
+      await refreshData()
+    } catch (e) {
+      setMsg(e.message || 'Failed')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   // ── Direct team assignment ─────────────────────────────────────────────────
 
   async function toggleTeamAssign(teamId) {
@@ -485,8 +506,9 @@ export function AdminJuryPage() {
       <div>
         <h1 className="font-display text-3xl font-bold text-ink-900">Jury Management</h1>
         <p className="mt-2 text-sm text-ink-600">
-          Assign judges by <strong>Domain + Track</strong> (auto-covers all matching problem statements) or by
-          specific <strong>Problem Statement</strong>. Both methods work together — a judge sees teams from either.
+          Assign judges by <strong>Theme + Category</strong>, by <strong>Department</strong> (matches each team&apos;s
+          department, set from its leader), or by specific <strong>Problem Statement</strong>. The methods work
+          together — a judge sees teams matched by any of them.
         </p>
         {eventId ? (
           <p className="mt-1 text-xs text-ink-500">
@@ -646,9 +668,11 @@ export function AdminJuryPage() {
             {judges.map((u) => {
               const psCount = u.assignedProblemStatementIds?.length || 0
               const dtCount = u.judgeAssignments?.length || 0
+              const deptCount = u.assignedDepartments?.length || 0
               const summary = [
                 psCount > 0 ? `${psCount} PS` : '',
                 dtCount > 0 ? `${dtCount} domain/track` : '',
+                deptCount > 0 ? `${deptCount} dept` : '',
               ].filter(Boolean).join(', ')
               return (
                 <option key={u.id} value={u.id}>
@@ -678,10 +702,13 @@ export function AdminJuryPage() {
               {(selectedJudge.assignedProblemStatementIds || []).map((psId) => (
                 <Badge key={psId} tone="neutral" className="font-mono text-[10px]">{psId}</Badge>
               ))}
+              {(selectedJudge.assignedDepartments || []).map((dept) => (
+                <Badge key={`dept-${dept}`} tone="brand" className="text-[10px]">Dept: {dept}</Badge>
+              ))}
               {assignedTeamsForJudge.map((t) => (
                 <Badge key={t.id} tone="success" className="text-[10px]">Team: {t.name || t.id}</Badge>
               ))}
-              {!selectedJudge.judgeAssignments?.length && !selectedJudge.assignedProblemStatementIds?.length && assignedTeamsForJudge.length === 0 ? (
+              {!selectedJudge.judgeAssignments?.length && !selectedJudge.assignedProblemStatementIds?.length && !selectedJudge.assignedDepartments?.length && assignedTeamsForJudge.length === 0 ? (
                 <span className="text-xs text-ink-500">No assignments yet</span>
               ) : null}
             </div>
@@ -694,7 +721,8 @@ export function AdminJuryPage() {
         <Card>
           <Tabs
             tabs={[
-              { id: 'domain', label: 'By Domain + Track', icon: Tag },
+              { id: 'domain', label: 'By Theme + Category', icon: Tag },
+              { id: 'dept', label: 'By Department', icon: Layers },
               { id: 'ps', label: 'By Problem Statement', icon: BookOpen },
               { id: 'team', label: 'By Team', icon: Users },
             ]}
@@ -708,7 +736,7 @@ export function AdminJuryPage() {
             <div className="mt-6 space-y-4">
               <p className="text-sm text-ink-600">
                 Click a cell to toggle. A covered cell means the judge evaluates <em>all</em> teams whose problem
-                statement belongs to that domain and track — including new ones added later.
+                statement belongs to that theme and category — including new ones added later.
                 Greyed cells have no problem statements yet.
               </p>
 
@@ -718,7 +746,7 @@ export function AdminJuryPage() {
                   <thead>
                     <tr>
                       <th className="pb-3 pr-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-500 w-52">
-                        Domain
+                        Theme
                       </th>
                       {TRACKS.map((t) => (
                         <th key={t} className="pb-3 px-2 text-center text-xs font-semibold uppercase tracking-wide text-ink-500 w-40">
@@ -726,7 +754,7 @@ export function AdminJuryPage() {
                         </th>
                       ))}
                       <th className="pb-3 pl-4 text-left text-xs font-semibold uppercase tracking-wide text-ink-500">
-                        Any track
+                        Any category
                       </th>
                     </tr>
                   </thead>
@@ -768,7 +796,7 @@ export function AdminJuryPage() {
                     })}
                     {/* "Any domain" row — track only, no domain filter */}
                     <tr>
-                      <td className="py-2 pr-4 text-sm font-medium text-ink-500 italic">Any domain</td>
+                      <td className="py-2 pr-4 text-sm font-medium text-ink-500 italic">Any theme</td>
                       {TRACKS.map((track) => {
                         const judgeAssignments = selectedJudge?.judgeAssignments || []
                         return (
@@ -793,6 +821,52 @@ export function AdminJuryPage() {
               <p className="text-xs text-ink-400">
                 Changes save immediately on click. No separate save button needed for domain/track assignments.
               </p>
+            </div>
+          ) : null}
+
+          {/* ── By Department grid ── */}
+          {activeTab === 'dept' ? (
+            <div className="mt-6 space-y-4">
+              <p className="text-sm text-ink-600">
+                Click a department to toggle. The judge then evaluates <em>every team whose department
+                matches</em> (the team&apos;s department is set from its leader) — regardless of problem
+                statement. The count shows how many registered teams fall in each department.
+              </p>
+
+              <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                {DEPARTMENTS.map((dept) => {
+                  const assigned = Array.isArray(selectedJudge?.assignedDepartments) && selectedJudge.assignedDepartments.includes(dept)
+                  const teamCount = teams.filter((t) => String(t.department || '').trim() === dept).length
+                  return (
+                    <button
+                      key={dept}
+                      type="button"
+                      disabled={saving}
+                      onClick={() => toggleDepartment(dept)}
+                      aria-pressed={assigned}
+                      className={`flex items-center justify-between gap-2 rounded-xl border p-3 text-left transition-all
+                        ${assigned
+                          ? 'border-brand-500/50 bg-brand-500/10 ring-1 ring-brand-500/30'
+                          : 'border-[rgb(var(--border))] hover:border-brand-500/30 hover:bg-[rgb(var(--surface-muted))]/40'
+                        }
+                        ${saving ? 'opacity-60' : ''}
+                      `}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        {assigned
+                          ? <CheckSquare className="h-4 w-4 shrink-0 text-brand-600" />
+                          : <Square className="h-4 w-4 shrink-0 text-ink-400" />}
+                        <span className="truncate text-sm font-medium text-ink-800">{dept}</span>
+                      </span>
+                      <span className="shrink-0 text-[10px] font-semibold uppercase tracking-wide text-ink-500">
+                        {teamCount} team{teamCount === 1 ? '' : 's'}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
+              <p className="text-xs text-ink-400">Changes save immediately on click.</p>
             </div>
           ) : null}
 

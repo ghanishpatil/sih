@@ -70,10 +70,10 @@ export const publicApi = {
     cachedRequest(
       `/api/problem-statements${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`,
     ),
-  getTimeline: (eventId) =>
-    cachedRequest(
-      `/api/timeline${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`,
-    ),
+  // SIH 2026 problem statements scraped live from sih.gov.in (incl. the live
+  // "ideas submitted" count). Returns { items, count, softwareCount,
+  // hardwareCount, lastSyncAt, ok, error, source }. Cached 30s client-side.
+  getSihProblemStatements: () => cachedRequest('/api/sih-problem-statements'),
   // Home hero slideshow — public read of admin-managed banners + settings.
   getHeroBanners: () => cachedRequest('/api/hero-banners'),
   // Challenges that "drop" to participants on a schedule — only released ones
@@ -110,15 +110,6 @@ export function createApi(getToken, getEventId = () => '') {
       authReq(`/api/admin/users/${uid}`, { method: 'DELETE' }),
     bulkDeleteUsers: (uids) =>
       authReq('/api/admin/users/bulk-delete', { method: 'POST', body: { uids } }),
-    // Competition Phases
-    getPhases: () => authReq('/api/admin/phases'),
-    updatePhases: (phases) => authReq('/api/admin/phases', { method: 'PUT', body: { phases } }),
-    transitionPhase: (phaseId, status) =>
-      authReq(`/api/admin/phases/${encodeURIComponent(phaseId)}/transition`, { method: 'POST', body: { status } }),
-    shortlistForPhase: (phaseId, teamIds) =>
-      authReq(`/api/admin/phases/${encodeURIComponent(phaseId)}/shortlist`, { method: 'POST', body: { teamIds } }),
-    unshortlistFromPhase: (phaseId, teamIds) =>
-      authReq(`/api/admin/phases/${encodeURIComponent(phaseId)}/unshortlist`, { method: 'POST', body: { teamIds } }),
     updateEventConfig: (body) =>
       authReq('/api/admin/event-config', { method: 'PATCH', body }),
     assignJudgeProblems: (body) =>
@@ -127,6 +118,10 @@ export function createApi(getToken, getEventId = () => '') {
       authReq('/api/admin/judges/assign-domain-track', { method: 'POST', body }),
     unassignJudgeDomainTrack: (body) =>
       authReq('/api/admin/judges/unassign-domain-track', { method: 'POST', body }),
+    assignJudgeDepartment: (body) =>
+      authReq('/api/admin/judges/assign-department', { method: 'POST', body }),
+    unassignJudgeDepartment: (body) =>
+      authReq('/api/admin/judges/unassign-department', { method: 'POST', body }),
     assignJudgeTeam: (body) =>
       authReq('/api/admin/judges/assign-team', { method: 'POST', body }),
     unassignJudgeTeam: (body) =>
@@ -232,9 +227,16 @@ export function createApi(getToken, getEventId = () => '') {
       }),
     deleteAdminProblemStatement: (psId) =>
       authReq(`/api/admin/problem-statements/${encodeURIComponent(psId)}`, { method: 'DELETE' }),
+    // Delete ALL problem statements for the active event (also clears teams' selections).
+    deleteAllProblemStatements: () =>
+      authReq('/api/admin/problem-statements/delete-all', { method: 'POST' }),
     // Admin listing includes drafts + private Open Innovation entries
     listAdminProblemStatements: (eventId) =>
       authReq(`/api/admin/problem-statements${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`),
+    // SIH 2026 live problem statements (reference data scraped from sih.gov.in).
+    listAdminSihProblemStatements: () => authReq('/api/admin/sih-problem-statements'),
+    refreshSihProblemStatements: () =>
+      authReq('/api/admin/sih-problem-statements/refresh', { method: 'POST' }),
     // Challenges (scheduled "drops"). Schedule config is set via patchAdminEvent.
     listAdminChallenges: (eventId) =>
       authReq(`/api/admin/challenges${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`),
@@ -262,9 +264,6 @@ export function createApi(getToken, getEventId = () => '') {
     updateSecurityIncident: (id, body) => authReq(`/api/admin/security/incidents/${encodeURIComponent(id)}`, { method: 'PATCH', body }),
     listWebhookLog: (limit = 100) => authReq(`/api/admin/security/webhook-log?limit=${limit}`),
     getDuplicateTeams: () => authReq('/api/admin/security/duplicate-teams'),
-    getTimeline: () => authReq('/api/timeline'),
-    updateTimeline: (phases) =>
-      authReq('/api/admin/timeline', { method: 'PUT', body: { phases } }),
     createTeam: (name, eventIdOverride) =>
       authReq('/api/participant/create-team', {
         method: 'POST',

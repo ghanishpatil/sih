@@ -123,9 +123,9 @@ export function Hero() {
                   </Button>
                 </Link>
               ) : (
-                <Link to="/timeline" className="w-full sm:w-auto">
+                <Link to="/how-to-register" className="w-full sm:w-auto">
                   <Button size="lg" className="w-full gap-2 shadow-glow-brand sm:w-auto">
-                    Check timeline
+                    How to register
                     <ArrowRight className="h-4 w-4" />
                   </Button>
                 </Link>

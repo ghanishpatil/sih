@@ -64,7 +64,7 @@ export function TracksSection() {
         >
           <Marquee speed={40} pauseOnHover innerClassName="py-8">
             {TRACKS.map((track, idx) => {
-              const cfg = domainConfig[idx]
+              const cfg = domainConfig[idx % domainConfig.length]
               return <DomainCard key={track.id} track={track} config={cfg} />
             })}
           </Marquee>

@@ -121,12 +121,7 @@ export function ParticipantRegistrationPage() {
   const registrationProgress = totalMembers > 0 ? Math.min(100, (submittedMembers / totalMembers) * 100) : 0
 
   // Determine registration close date
-  const registrationCloseDate = (() => {
-    const phases = eventCfg?.competitionPhases || []
-    const phase1 = phases.find(p => p.order === 1)
-    if (phase1?.deadline) return phase1.deadline
-    return eventCfg?.registrationClosesAt
-  })()
+  const registrationCloseDate = eventCfg?.registrationClosesAt
   
   const pastRegClose =
     Boolean(registrationCloseDate) &&

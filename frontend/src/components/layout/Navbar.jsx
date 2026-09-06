@@ -11,7 +11,6 @@ const links = [
   { to: '/', label: 'Home' },
   { to: '/about', label: 'About & SDGs' },
   { to: '/problems', label: 'Problem Statements' },
-  { to: '/timeline', label: 'Event Timeline' },
   { to: '/announcements', label: 'Announcements' },
   { to: '/results', label: 'Results' },
   { to: '/grand-finale', label: 'Grand Finale' },

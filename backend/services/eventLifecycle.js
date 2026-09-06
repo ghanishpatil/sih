@@ -36,17 +36,7 @@ function registrationTimestampsOk(eventDoc, now) {
   
   // Check for closing timestamp
   // Priority: explicit registrationClosesAt > Phase 1 deadline (fallback only)
-  let closes = tsMs(eventDoc.registrationClosesAt)
-  
-  if (closes == null) {
-    // Fallback: use Phase 1 deadline only if no explicit close date is set
-    const phases = Array.isArray(eventDoc.competitionPhases) ? eventDoc.competitionPhases : []
-    const phase1 = phases.find(p => p.order === 1)
-    if (phase1?.deadline) {
-      closes = new Date(phase1.deadline).getTime()
-    }
-  }
-  
+  const closes = tsMs(eventDoc.registrationClosesAt)
   if (closes != null && closes < now) return false
   return true
 }
@@ -158,23 +148,7 @@ export function allowTeamFormation(eventDoc, now = Date.now()) {
     return { ok: false, reason: 'The hackathon has concluded. Team formation is closed.' }
   }
 
-  // Check if using multi-phase system
-  const phases = Array.isArray(eventDoc.competitionPhases) ? eventDoc.competitionPhases : []
-  if (phases.length > 0) {
-    // Multi-phase mode: allow team formation if any phase is not yet completed/archived
-    const hasActiveOrUpcomingPhase = phases.some(p => 
-      ['DRAFT', 'UPCOMING', 'ACTIVE', 'SUBMISSION_LOCKED', 'EVALUATION', 'SHORTLISTING'].includes(p.status)
-    )
-    
-    if (!hasActiveOrUpcomingPhase) {
-      return { ok: false, reason: 'All competition phases have concluded. Team formation is closed.' }
-    }
-    
-    // Allow team formation during active phases
-    return { ok: true }
-  }
-
-  // Legacy system: Block if submission deadline has passed (no point forming teams)
+  // Block if submission deadline has passed (no point forming teams).
   const deadline = tsMs(eventDoc.submissionDeadline)
   if (deadline && deadline < now) {
     return { ok: false, reason: 'Submission deadline has passed. Team formation is closed.' }

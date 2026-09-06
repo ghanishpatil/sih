@@ -112,31 +112,33 @@ function splitCSVLines(text) {
 
 /** Generate a downloadable CSV template for problem statements. */
 export function buildProblemStatementTemplate() {
-  // Note: `id` is intentionally omitted — system auto-assigns sequential IDs (skh001, skh002, ...).
-  // `track` accepts: Software | Hardware
-  // `domain` accepts: Health | Education | Transportation | Food Safety & Security |
-  //                   Waste Management | Agriculture | Industry & MSME Innovation | Open Innovation
-  const headers = ['title', 'organization', 'department', 'track', 'domain', 'description', 'published', 'maxTeams', 'order']
+  // `PS Number` is the unique ID from your sheet (e.g. SIH26001) — used as the PS id.
+  // `No` sets the display order. `category` accepts: Software | Hardware.
+  // `theme` accepts one of the 17 official themes (e.g. Fintech, Smart Automation,
+  //   MedTech / BioTech / HealthTech, Disaster Management, Blockchain & Cybersecurity, …).
+  const headers = ['PS Number', 'No', 'title', 'category', 'theme', 'organization', 'department', 'description', 'published', 'maxTeams']
   const example1 = [
+    'SIH26001',
+    '1',
     'Civic engagement dashboard',
+    'Software',
+    'Smart Education',
     'Municipal Council',
     'Urban Planning',
-    'Software',
-    'Transportation',
     'Build a dashboard that lets citizens track municipal projects and provide feedback in real time.',
     'true',
     '5',
-    '1',
   ]
   const example2 = [
+    'SIH26002',
+    '2',
     'Low-cost crop disease scanner',
+    'Hardware',
+    'Agriculture, FoodTech & Rural Development',
     'Agriculture Department',
     'Plant Pathology',
-    'Hardware',
-    'Agriculture',
     'Portable IoT device using camera + ML to detect leaf diseases offline for small farmers.',
     'true',
-    '',
     '',
   ]
 
@@ -163,32 +165,33 @@ export function buildProblemStatementTemplate() {
  * themed example rows so it's clear these are a separate, curated tier.
  */
 export function buildSuperPsTemplate() {
-  // Note: `id` is intentionally omitted — system auto-assigns sequential IDs (skh001, skh002, ...).
-  // `track` accepts: Software | Hardware
-  // `domain` accepts: Health | Education | Transportation | Food Safety & Security |
-  //                   Waste Management | Agriculture | Industry & MSME Innovation | Open Innovation
-  const headers = ['title', 'organization', 'department', 'track', 'domain', 'description', 'published', 'maxTeams', 'order']
+  // `PS Number` is the unique ID from your sheet (e.g. SIH26001) — used as the PS id.
+  // `No` sets the display order. `category` accepts: Software | Hardware.
+  // `theme` accepts one of the 17 official themes.
+  const headers = ['PS Number', 'No', 'title', 'category', 'theme', 'organization', 'department', 'description', 'published', 'maxTeams']
   const example1 = [
+    'SIH26001',
+    '1',
     'National-scale disaster response platform',
+    'Software',
+    'Disaster Management',
     'State Disaster Management Authority',
     'Emergency Operations',
-    'Software',
-    'Transportation',
     'Flagship challenge: build a real-time, multi-agency coordination platform for large-scale disaster response.',
     'true',
     '3',
-    '1',
   ]
   const example2 = [
+    'SIH26002',
+    '2',
     'AI-assisted early cancer screening kit',
+    'Hardware',
+    'MedTech / BioTech / HealthTech',
     'Apex Medical Research Institute',
     'Oncology',
-    'Hardware',
-    'Health',
     'High-impact challenge: an affordable point-of-care device for early screening in rural clinics.',
     'true',
     '3',
-    '2',
   ]
 
   function escape(v) {

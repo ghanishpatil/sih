@@ -28,7 +28,6 @@ import {
 } from '../services/teamRegistration.js'
 import { notifyTeamMemberJoined, notifyRegistrationComplete, notifySubmissionFinalized } from '../services/notificationService.js'
 import { logActivity, actorFromReq, ACTIVITY_TYPE } from '../services/activityLog.js'
-import { getActivePhase, canTeamSubmit, isPhaseSubmissionOpen, phaseAcceptsSubmissions } from '../services/competitionPhases.js'
 import {
   OPEN_INNOVATION_DOMAIN,
   OI_ORIGIN,
@@ -351,9 +350,15 @@ r.post('/register-team-members', async (req, res, next) => {
       })
     })
 
+    // Team-level department = the team LEADER's department. Members keep their
+    // own department on their individual registration, but the team is grouped
+    // by the leader's department (used for dept-wise judge assignment).
+    const leaderDepartment = (members.find((m) => m.isLeader) || members[0] || {}).department || ''
+
     batch.set(teamRef, {
       name: teamName,
       teamSize: members.length,
+      department: leaderDepartment,
       membersRegisteredAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     }, { merge: true })
@@ -1015,12 +1020,9 @@ r.post('/submission-metadata', async (req, res, next) => {
       return res.status(403).json({ error: 'Complete registration and payment before submitting.', redirectTo: '/dashboard/registration' })
     }
 
-    // Phase gating (only when phases configured) — uses new state machine
-    const activePhase = getActivePhase(merged)
-    // Finals mode: when the event's finalists-only gate is on, the active phase
-    // becomes a fresh, independent submission window for hand-picked finalists —
-    // gated by team.finalist (NOT round-1 shortlisting) and its own lock
-    // (finalsSubmissionLocked), so a round-1-finalized team can still submit.
+    // Schedule-based gating: submissions are controlled purely by the event
+    // schedule (submissionsOpen flag + submissionDeadline). Finals get their own
+    // window gated by finalist status + finalsSubmissionLocked.
     const finalsMode = merged.finalistsOnly === true
 
     if (finalsMode) {
@@ -1030,69 +1032,25 @@ r.post('/submission-metadata', async (req, res, next) => {
       if (team.finalsSubmissionLocked) {
         return res.status(403).json({ error: 'Your finals submission is finalized and locked.' })
       }
-      if (!activePhase || !phaseAcceptsSubmissions(activePhase)) {
-        return res.status(403).json({ error: 'The finals submission window is not open yet.' })
-      }
-      if (!isPhaseSubmissionOpen(activePhase)) {
-        return res.status(403).json({ error: `Submissions for "${activePhase.name}" are not currently open.` })
-      }
-    } else if (activePhase) {
-      // BUG-2 FIX: Check submissionLocked even when an active phase exists.
-      // canTeamSubmit() does not check this flag.
-      if (team.submissionLocked) {
-        return res.status(403).json({ error: 'Submission is finalized and locked for your team.' })
-      }
-      if (!canTeamSubmit(team, activePhase)) {
-        const isFirstPhase = activePhase.order === 1
-        if (!isFirstPhase && !(team.shortlistedPhases || []).includes(activePhase.id)) {
-          return res.status(403).json({ error: `Your team is not shortlisted for "${activePhase.name}".` })
-        }
-        if (activePhase.deadline && new Date(activePhase.deadline).getTime() < Date.now()) {
-          return res.status(403).json({ error: `Submission deadline for "${activePhase.name}" has passed.` })
-        }
-        return res.status(403).json({ error: `Submissions for "${activePhase.name}" are not currently open.` })
+      if (!merged.submissionsOpen) {
+        return res.status(403).json({ error: 'The finals submission window is not open.' })
       }
     } else {
       const subGate = submissionEditingAllowed(merged, team)
       if (!subGate.ok) return res.status(403).json({ error: subGate.reason })
     }
 
-    // BUG-3 FIX: Wrap phase-scoped write in a transaction to prevent race
-    // condition when two concurrent requests from the same team both read
-    // phasesData and then overwrite each other's changes.
+    // Flat submission storage (no phases).
     const subRef = db.doc(`submissions/${teamId}`)
+    await subRef.set({
+      teamId,
+      eventId: team.eventId || eventId || '',
+      ...safe,
+      updatedAt: FieldValue.serverTimestamp(),
+      updatedBy: uid,
+    }, { merge: true })
 
-    if (activePhase) {
-      await db.runTransaction(async (tx) => {
-        const subSnap = await tx.get(subRef)
-        const existingSub = subSnap.exists ? subSnap.data() : {}
-        const phasesData = existingSub.phases || {}
-        const currentPhaseData = phasesData[activePhase.id] || {}
-        tx.set(subRef, {
-          teamId,
-          eventId: team.eventId || eventId || '',
-          phases: {
-            ...phasesData,
-            [activePhase.id]: { ...currentPhaseData, ...safe, updatedAt: new Date().toISOString(), updatedBy: uid },
-          },
-          currentPhaseId: activePhase.id,
-          ...safe, // Top-level mirror for easy access
-          updatedAt: FieldValue.serverTimestamp(),
-          updatedBy: uid,
-        }, { merge: true })
-      })
-    } else {
-      // Simple flat storage when no phases configured — no race risk here
-      await subRef.set({
-        teamId,
-        eventId: team.eventId || eventId || '',
-        ...safe,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: uid,
-      }, { merge: true })
-    }
-
-    res.json({ ok: true, phaseId: activePhase?.id || null })
+    res.json({ ok: true })
   } catch (e) {
     next(e)
   }
@@ -1121,41 +1079,20 @@ r.post('/finalize-submission', async (req, res, next) => {
     const blockedFin = participationBlockedMessage(team)
     if (blockedFin) return res.status(403).json({ error: blockedFin })
 
-    // BUG-1 FIX: Add phase gating to finalize-submission.
-    // Previously this endpoint only called submissionEditingAllowed() which
-    // has no phase awareness — a team could finalize even when the active
-    // phase deadline had passed or they weren't shortlisted.
-    const activePhaseForFinalize = getActivePhase(merged)
+    // Schedule-based finalize gating. Finals get their own window + lock.
     const finalsModeFinalize = merged.finalistsOnly === true
 
     if (finalsModeFinalize) {
-      // Finals finalization — gated by team.finalist, with its own lock.
       if (team.finalist !== true) {
         return res.status(403).json({ error: 'Finals submissions are open to selected finalists only.' })
       }
       if (team.finalsSubmissionLocked) {
         return res.status(403).json({ error: 'Your finals submission is already finalized and locked.' })
       }
-      if (!activePhaseForFinalize || !phaseAcceptsSubmissions(activePhaseForFinalize)) {
-        return res.status(403).json({ error: 'The finals submission window is not open yet.' })
-      }
-      if (!isPhaseSubmissionOpen(activePhaseForFinalize)) {
-        return res.status(403).json({ error: `Submissions for "${activePhaseForFinalize.name}" are not currently open.` })
-      }
-    } else if (activePhaseForFinalize) {
-      // When phases are configured, use phase-aware gate
-      if (!canTeamSubmit(team, activePhaseForFinalize)) {
-        const isFirstPhase = activePhaseForFinalize.order === 1
-        if (!isFirstPhase && !(team.shortlistedPhases || []).includes(activePhaseForFinalize.id)) {
-          return res.status(403).json({ error: `Your team is not shortlisted for "${activePhaseForFinalize.name}".` })
-        }
-        if (activePhaseForFinalize.deadline && new Date(activePhaseForFinalize.deadline).getTime() < Date.now()) {
-          return res.status(403).json({ error: `Submission deadline for "${activePhaseForFinalize.name}" has passed.` })
-        }
-        return res.status(403).json({ error: `Submissions for "${activePhaseForFinalize.name}" are not currently open.` })
+      if (!merged.submissionsOpen) {
+        return res.status(403).json({ error: 'The finals submission window is not open.' })
       }
     } else {
-      // No phases — use the event-level flag gate
       const subGate = submissionEditingAllowed(merged, team)
       if (!subGate.ok) return res.status(403).json({ error: subGate.reason })
     }
@@ -1177,10 +1114,8 @@ r.post('/finalize-submission', async (req, res, next) => {
     // Prevents finalizing an empty submission.
     const subSnapForFinalize = await db.doc(`submissions/${teamId}`).get()
     const subDataForFinalize = subSnapForFinalize.exists ? subSnapForFinalize.data() : {}
-    const effectiveSub = activePhaseForFinalize
-      ? (subDataForFinalize.phases?.[activePhaseForFinalize.id] || {})
-      : subDataForFinalize
-    const reqs = activePhaseForFinalize?.requirements || {
+    const effectiveSub = subDataForFinalize
+    const reqs = {
       pptRequired: true, pdfRequired: true, videoRequired: false, githubRequired: false, deployedUrlRequired: false,
     }
     const anyUpload = Boolean(
@@ -1200,10 +1135,7 @@ r.post('/finalize-submission', async (req, res, next) => {
     }
 
     if (finalsModeFinalize) {
-      // Finals: lock ONLY the finals submission (round-1 `submissionLocked`
-      // stays as-is) and record finalization inside the active phase slot so
-      // round-1's artifacts/lock are never disturbed.
-      const finalsPhaseId = activePhaseForFinalize.id
+      // Finals: lock ONLY the finals submission (round-1 `submissionLocked` stays as-is).
       await teamRef.set(
         { finalsSubmissionLocked: true, finalsSubmissionFinalizedAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() },
         { merge: true },
@@ -1211,9 +1143,9 @@ r.post('/finalize-submission', async (req, res, next) => {
       await db.doc(`submissions/${teamId}`).set(
         {
           eventId: team.eventId || eventId || '',
-          phases: {
-            [finalsPhaseId]: { finalizedAt: new Date().toISOString(), finalizedBy: uid, status: 'submitted' },
-          },
+          finalsFinalizedAt: new Date().toISOString(),
+          finalsFinalizedBy: uid,
+          finalsStatus: 'submitted',
         },
         { merge: true },
       )
@@ -1261,41 +1193,16 @@ r.get('/submission-versions', async (req, res, next) => {
 
     const sub = subSnap.data()
 
-    // BUG-7 FIX: Return current phase data when a phase is active, not just
-    // the top-level mirror. The top-level mirror reflects the last write across
-    // ALL phases — if Phase 1 was submitted and Phase 2 is now active, the
-    // mirror shows Phase 1 data, causing the form to pre-populate with stale URLs.
-    const merged = await getActiveEventConfig()
-    const currentActivePhase = getActivePhase(merged)
-    const currentPhaseId = currentActivePhase?.id || sub.currentPhaseId || null
-    const phaseData = currentPhaseId && sub.phases?.[currentPhaseId]
-      ? sub.phases[currentPhaseId]
-      : null
+    // Flat submission storage (no phases).
+    const current = {
+      pptUrl: sub.pptUrl || '',
+      pdfUrl: sub.pdfUrl || '',
+      videoUrl: sub.videoUrl || '',
+      githubUrl: sub.githubUrl || '',
+      deployedUrl: sub.deployedUrl || '',
+    }
 
-    // Use phase-scoped data if available, fall back to top-level mirror
-    const current = phaseData
-      ? {
-          pptUrl: phaseData.pptUrl || '',
-          pdfUrl: phaseData.pdfUrl || '',
-          videoUrl: phaseData.videoUrl || '',
-          githubUrl: phaseData.githubUrl || '',
-          deployedUrl: phaseData.deployedUrl || '',
-        }
-      : {
-          pptUrl: sub.pptUrl || '',
-          pdfUrl: sub.pdfUrl || '',
-          videoUrl: sub.videoUrl || '',
-          githubUrl: sub.githubUrl || '',
-          deployedUrl: sub.deployedUrl || '',
-        }
-
-    res.json({
-      versions: [],
-      currentVersion: 0,
-      phases: sub.phases || {},
-      currentPhaseId,
-      current,
-    })
+    res.json({ versions: [], currentVersion: 0, phases: {}, current })
   } catch (e) {
     next(e)
   }

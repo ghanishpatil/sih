@@ -20,10 +20,11 @@ import { Input } from '@/components/ui/Input.jsx'
 import { Button } from '@/components/ui/Button.jsx'
 import { EmptyState } from '@/components/ui/EmptyState.jsx'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
-import { APP } from '@/utils/constants.js'
+import { APP, PS_THEMES } from '@/utils/constants.js'
 import { publicApi } from '@/services/api.js'
 import { useEvent } from '@/context/EventContext.jsx'
 import { Link } from 'react-router-dom'
+import { SihProblemStatements } from '@/components/problems/SihProblemStatements.jsx'
 
 /* ── Tracks (2): Software, Hardware ─────────────────────────── */
 const TRACKS = ['Software', 'Hardware']
@@ -33,17 +34,9 @@ const trackStyles = {
 }
 const defaultTrack = { bg: 'bg-ink-100', text: 'text-ink-700', dot: 'bg-ink-400', border: 'border-ink-200' }
 
-/* ── Domains (7): icon + color per domain ───────────────────── */
-const DOMAINS = [
-  'Health',
-  'Education',
-  'Transportation',
-  'Food Safety & Security',
-  'Waste Management',
-  'Agriculture',
-  'Industry & MSME Innovation',
-  'Open Innovation',
-]
+/* ── Themes: 17 official themes. Styled ones below; the rest fall back to a
+   neutral Tag style via getDomainStyle(). ───────────────────── */
+const DOMAINS = PS_THEMES
 
 const domainStyles = {
   'Health': { Icon: HeartPulse, text: 'text-rose-700', bg: 'bg-rose-50', iconBg: 'bg-rose-100' },
@@ -214,7 +207,7 @@ function DetailDrawer({ ps, onClose, onToggleBookmark, isBookmarked, deadline })
               </p>
             </div>
             <div className="bg-[rgb(var(--surface))] px-4 py-4 text-center">
-              <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Track</p>
+              <p className="text-[10px] font-bold uppercase tracking-wider text-ink-500">Category</p>
               <p className={`mt-1 font-display text-base font-bold ${track.text}`}>{ps.category || 'Software'}</p>
             </div>
             <div className="bg-[rgb(var(--surface))] px-4 py-4 text-center">
@@ -230,7 +223,7 @@ function DetailDrawer({ ps, onClose, onToggleBookmark, isBookmarked, deadline })
           <div className="divide-y divide-[rgb(var(--border))] px-6">
             {[
               { label: 'Department', value: ps.department, Icon: Layers },
-              { label: 'Domain', value: ps.theme || ps.domain, Icon: domain.Icon },
+              { label: 'Theme', value: ps.theme || ps.domain, Icon: domain.Icon },
             ].filter((f) => f.value).map(({ label, value, Icon }) => (
               <div key={label} className="flex items-start gap-3 py-3.5">
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-ink-100">
@@ -345,6 +338,13 @@ export function ProblemsPage() {
   const [sorting, setSorting] = useState([{ id: 'serial', desc: false }])
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize: 25 })
 
+  /* ── SIH 2026 live problem statements (separate tab; lazy-loaded on open) ── */
+  const [psView, setPsView] = useState('skh') // 'skh' = platform bank, 'sih' = live SIH
+  const [sihItems, setSihItems] = useState([])
+  const [sihMeta, setSihMeta] = useState({})
+  const [sihLoading, setSihLoading] = useState(true)
+  const [sihLoaded, setSihLoaded] = useState(false)
+
   /* ── Load data ── */
   useEffect(() => {
     let cancelled = false
@@ -367,6 +367,32 @@ export function ProblemsPage() {
     load()
     return () => { cancelled = true }
   }, [eventId])
+
+  /* ── Lazy-load the live SIH list only when its tab is first opened ── */
+  useEffect(() => {
+    if (psView !== 'sih' || sihLoaded) return
+    let cancelled = false
+    setSihLoading(true)
+    publicApi
+      .getSihProblemStatements()
+      .then((data) => {
+        if (cancelled) return
+        setSihItems(Array.isArray(data?.items) ? data.items : [])
+        setSihMeta(data || {})
+        setSihLoaded(true)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setSihMeta({ ok: false, error: 'Could not load live SIH data' })
+        setSihLoaded(true)
+      })
+      .finally(() => {
+        if (!cancelled) setSihLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [psView, sihLoaded])
 
   /* ── Deep-link on initial load (?ps=ID) ── */
   useEffect(() => {
@@ -486,7 +512,7 @@ export function ProblemsPage() {
     },
     {
       id: 'track',
-      header: ({ column }) => <SortableHeader column={column}>Track</SortableHeader>,
+      header: ({ column }) => <SortableHeader column={column}>Category</SortableHeader>,
       accessorFn: (row) => row.category || 'Software',
       cell: ({ getValue }) => {
         const t = getValue()
@@ -543,7 +569,7 @@ export function ProblemsPage() {
     },
     {
       id: 'domain',
-      header: ({ column }) => <SortableHeader column={column}>Domain</SortableHeader>,
+      header: ({ column }) => <SortableHeader column={column}>Theme</SortableHeader>,
       accessorFn: (row) => row.theme || row.domain || '',
       cell: ({ getValue }) => {
         const d = getValue()
@@ -672,7 +698,36 @@ export function ProblemsPage() {
         </div>
       </section>
 
-      {/* ═══ FILTERS + TABLE ═══ */}
+      {/* ═══ VIEW SWITCHER: platform problem bank vs live SIH 2026 ═══ */}
+      <section className="w-full px-4 pt-6 sm:px-6 lg:px-8">
+        <div className="inline-flex rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] p-1 shadow-sm">
+          {[
+            { id: 'skh', label: `${APP.shortName} Problem Bank` },
+            { id: 'sih', label: 'SIH 2026 (Live)' },
+          ].map((t) => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setPsView(t.id)}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+                psView === t.id ? 'bg-brand-600 text-white shadow' : 'text-ink-600 hover:text-ink-900'
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      {/* ═══ LIVE SIH 2026 PROBLEM STATEMENTS ═══ */}
+      {psView === 'sih' ? (
+        <section className="w-full px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
+          <SihProblemStatements items={sihItems} meta={sihMeta} loading={sihLoading} />
+        </section>
+      ) : null}
+
+      {/* ═══ FILTERS + TABLE (platform problem bank) ═══ */}
+      {psView === 'skh' ? (
       <section className="w-full px-4 py-8 sm:px-6 lg:px-8 lg:py-10">
         {/* Top toolbar */}
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -718,8 +773,8 @@ export function ProblemsPage() {
                   ]}
                   onChange={(v) => setFilters((f) => ({ ...f, type: v }))}
                 />
-                <FilterSelect label="Track" value={filters.track} options={tracks} onChange={(v) => setFilters((f) => ({ ...f, track: v }))} />
-                <FilterSelect label="Domain" value={filters.domain} options={domains} onChange={(v) => setFilters((f) => ({ ...f, domain: v }))} />
+                <FilterSelect label="Category" value={filters.track} options={tracks} onChange={(v) => setFilters((f) => ({ ...f, track: v }))} />
+                <FilterSelect label="Theme" value={filters.domain} options={domains} onChange={(v) => setFilters((f) => ({ ...f, domain: v }))} />
                 <FilterSelect
                   label="Participation"
                   value={filters.participation}
@@ -935,6 +990,7 @@ export function ProblemsPage() {
           </>
         )}
       </section>
+      ) : null}
 
       {/* Detail Drawer */}
       <AnimatePresence>

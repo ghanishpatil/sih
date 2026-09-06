@@ -18,7 +18,6 @@ import { Button } from '@/components/ui/Button.jsx'
 import { APP } from '@/utils/constants.js'
 import { AdminScopeBanner } from '@/components/admin/AdminScopeBanner.jsx'
 import { CommandPalette } from '@/components/admin/CommandPalette.jsx'
-import { EmailVerificationBanner } from '@/components/participant/EmailVerificationBanner.jsx'
 import { useUnreadCounts } from '@/hooks/useUnreadCounts.js'
 import { useSecurityAlertCount } from '@/hooks/useSecurityAlertCount.js'
 import { useAdminSessionTimeout } from '@/hooks/useAdminSessionTimeout.js'
@@ -53,13 +52,11 @@ const nav = {
     { to: '/admin/users', label: 'Users', icon: UserCog },
     { to: '/admin/payments', label: 'Payments', icon: CreditCard },
     { to: '/admin/problems', label: 'Problem Statements', icon: Layers },
-    { to: '/admin/phases', label: 'Competition Phases', icon: Layers },
     { to: '/admin/submissions', label: 'Submissions', icon: FileUp },
     { group: 'Evaluation' },
     { to: '/admin/jury', label: 'Jury Management', icon: Gavel },
     { to: '/admin/mentors', label: 'Mentor Management', icon: Handshake },
     { to: '/admin/evaluations', label: 'Evaluations', icon: ClipboardCheck },
-    { to: '/admin/shortlisting', label: 'Shortlisting', icon: Star },
     { to: '/admin/results', label: 'Results', icon: Trophy },
     { to: '/admin/challenges', label: 'Challenges', icon: Swords },
     { to: '/admin/finalists', label: 'Finalists', icon: Medal },
@@ -67,7 +64,6 @@ const nav = {
     { group: 'Operations' },
     { to: '/admin/chats', label: 'Chat Monitor', icon: MessageCircle },
     { to: '/admin/announcements', label: 'Announcements', icon: Megaphone },
-    { to: '/admin/timeline', label: 'Timeline', icon: Clock },
     { to: '/admin/sponsors', label: 'Sponsors', icon: Building2 },
     { to: '/admin/hero', label: 'Latest News', icon: Image },
     { to: '/admin/registration-desk', label: 'Registration Desk', icon: ClipboardCheck },
@@ -111,7 +107,6 @@ const nav = {
     { to: '/admin/teams', label: 'Teams', icon: Users },
     { to: '/admin/submissions', label: 'Submissions', icon: FileUp },
     { group: 'Evaluation' },
-    { to: '/admin/shortlisting', label: 'Shortlisting', icon: Star },
     { to: '/admin/results', label: 'Results', icon: Trophy },
     { group: 'Insights' },
     { to: '/admin/reports', label: 'Reports & Analytics', icon: BarChart3 },
@@ -163,7 +158,7 @@ export function DashboardLayout({ variant = 'default' }) {
     if (variant !== 'admin' || role !== ROLES.VIEWER) return
     const allowedPrefixes = [
       '/admin/overview', '/admin/search', '/admin/teams',
-      '/admin/submissions', '/admin/shortlisting', '/admin/results', '/admin/reports',
+      '/admin/submissions', '/admin/results', '/admin/reports',
     ]
     const ok = allowedPrefixes.some((p) => location.pathname === p || location.pathname.startsWith(p + '/'))
     if (!ok && location.pathname.startsWith('/admin')) {
@@ -479,7 +474,6 @@ export function DashboardLayout({ variant = 'default' }) {
               <span><strong>Observer mode (read-only).</strong> You can view everything here, but changes are disabled for your account.</span>
             </div>
           ) : null}
-          {isParticipantShell ? <EmailVerificationBanner /> : null}
           <Outlet />
         </div>
       </div>

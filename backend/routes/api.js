@@ -20,6 +20,7 @@ import {
   CACHE_NS,
   CACHE_TTL,
 } from '../services/responseCache.js'
+import { getSihSnapshot, refreshSihSnapshot } from '../services/sihScraper.js'
 import {
   normalizeJudgeScores,
   resolveEvaluationCriteria,
@@ -39,6 +40,40 @@ import {
 } from '../services/teamRegistration.js'
 import { isValidDocId } from '../utils/sanitize.js'
 
+// ── Problem-statement taxonomy ───────────────────────────────────────────────
+// A problem statement has a CATEGORY (Software/Hardware) and a THEME (subject area).
+// These replace the older "track"/"domain" terminology (fields are still stored as
+// `category` and `theme`; `domain` is kept as a mirror of `category` for display compat).
+export const PS_CATEGORIES = ['Software', 'Hardware']
+export const PS_THEMES = [
+  'Miscellaneous',
+  'Fintech',
+  'Smart Automation',
+  'Fitness & Sports',
+  'Space Technology',
+  'Heritage & Culture',
+  'MedTech / BioTech / HealthTech',
+  'Agriculture, FoodTech & Rural Development',
+  'Smart Vehicles',
+  'Transportation & Logistics',
+  'Robotics & Drones',
+  'Clean & Green Technology',
+  'Renewable / Sustainable Energy',
+  'Disaster Management',
+  'Smart Education',
+  'Travel & Tourism',
+  'Blockchain & Cybersecurity',
+]
+// Tolerant matching: collapse whitespace, unify &/and, lowercase.
+function normTheme(s) {
+  return String(s || '')
+    .toLowerCase()
+    .replace(/\s*&\s*/g, ' & ')
+    .replace(/\s+and\s+/g, ' & ')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
 function tsIso(ts) {
   if (!ts) return null
   if (typeof ts.toDate === 'function') return ts.toDate().toISOString()
@@ -55,12 +90,6 @@ function tsToMs(ts) {
 async function mergedPublicSnapshot(eventId) {
   const merged = await getActiveEventConfig()
   const rz = isRazorpayConfigured()
-  // Include competition phases (publicly readable for participant UI)
-  const phases = Array.isArray(merged.competitionPhases) ? merged.competitionPhases : []
-  // Use the canonical getActivePhase() so the public snapshot, submission gating,
-  // and participant UI all agree on what "active" means (manual ACTIVE override,
-  // or date-driven UPCOMING within its window).
-  const { getActivePhase } = await import('../services/competitionPhases.js')
   return {
     eventId: merged.eventId,
     lifecyclePhase: merged.lifecyclePhase,
@@ -79,8 +108,6 @@ async function mergedPublicSnapshot(eventId) {
     submissionDeadline: tsIso(merged.submissionDeadline),
     razorpayConfigured: rz,
     razorpayKeyId: rz ? getRazorpayPublicKeyId() : null,
-    competitionPhases: phases,
-    activePhase: getActivePhase({ competitionPhases: phases }),
     // Finals: per-domain finalist target counts + the finalists-only judging gate.
     finalistsPerDomain: merged.finalistsPerDomain && typeof merged.finalistsPerDomain === 'object' ? merged.finalistsPerDomain : {},
     finalistsOnly: merged.finalistsOnly === true,
@@ -233,25 +260,6 @@ r.get('/event-config', async (req, res, next) => {
   }
 })
 
-/** Public timeline (phases with dates for display) */
-r.get('/timeline', async (req, res, next) => {
-  try {
-    const db = getDb()
-    const activeEvent = await getActiveEvent()
-    if (!activeEvent) return res.json({ phases: [] })
-
-    const data = await cachedFetch(CACHE_NS.TIMELINE, activeEvent.id, CACHE_TTL.TIMELINE, async () => {
-      const eventSnap = await db.doc(`events/${activeEvent.id}`).get()
-      const evData = eventSnap.exists ? eventSnap.data() : {}
-      const timelinePhases = Array.isArray(evData.timelinePhases) ? evData.timelinePhases : []
-      return { phases: timelinePhases, eventId: activeEvent.id }
-    })
-    res.json(data)
-  } catch (e) {
-    next(e)
-  }
-})
-
 r.get('/problem-statements', async (req, res, next) => {
   try {
     const db = getDb()
@@ -290,6 +298,21 @@ r.get('/problem-statements', async (req, res, next) => {
         .filter((p) => p.visibility !== 'private')
     })
     res.json(data)
+  } catch (e) {
+    next(e)
+  }
+})
+
+/**
+ * Public: SIH 2026 problem statements scraped live from sih.gov.in, including the
+ * live "ideas submitted" count (e.g. 7/500). This is external reference data —
+ * served from an in-memory snapshot refreshed on a schedule (services/sihScraper.js),
+ * kept entirely separate from this platform's own `problemStatements` collection.
+ */
+r.get('/sih-problem-statements', async (_req, res, next) => {
+  try {
+    const snap = await getSihSnapshot()
+    res.json(snap)
   } catch (e) {
     next(e)
   }
@@ -513,266 +536,6 @@ export function adminRouter() {
   })
 
   /** Get competition phases for the active event */
-  router.get('/phases', async (req, res, next) => {
-    try {
-      const activeEvent = await getActiveEvent()
-      if (!activeEvent) return res.json({ phases: [], eventId: null })
-      const eventRef = db().doc(`events/${activeEvent.id}`)
-      const eventSnap = await eventRef.get()
-      const data = eventSnap.data() || {}
-      const { getPhases, PHASE_STATES } = await import('../services/competitionPhases.js')
-      const phases = getPhases(data)
-      
-      // MIGRATION FIX: Auto-set registrationOpen flag if phase 1 is ACTIVE but flag isn't set
-      // This ensures existing deployments work correctly after the auto-flag feature is deployed
-      const hasActivePhaseOne = phases.some(p => p.order === 1 && p.status === PHASE_STATES.ACTIVE)
-      if (hasActivePhaseOne && data.registrationOpen !== true) {
-        await eventRef.set({ 
-          registrationOpen: true, 
-          updatedAt: FieldValue.serverTimestamp() 
-        }, { merge: true })
-        invalidateEventCache()
-      }
-      
-      res.json({ phases, eventId: activeEvent.id })
-    } catch (e) {
-      next(e)
-    }
-  })
-
-  /** Replace phases for the active event */
-  router.put('/phases', async (req, res, next) => {
-    try {
-      const activeEvent = await getActiveEvent()
-      if (!activeEvent) return res.status(503).json({ error: 'No active event.' })
-      const phasesInput = Array.isArray(req.body?.phases) ? req.body.phases : []
-      const { normalizePhase, PHASE_STATES } = await import('../services/competitionPhases.js')
-      const normalized = []
-      const seenIds = new Set()
-      for (const p of phasesInput) {
-        const n = normalizePhase(p)
-        if (seenIds.has(n.id)) {
-          return res.status(400).json({ error: `Duplicate phase id: ${n.id}` })
-        }
-        seenIds.add(n.id)
-        normalized.push(n)
-      }
-      // Ensure only one phase is in ACTIVE state at a time
-      const activeCount = normalized.filter((p) => p.status === PHASE_STATES.ACTIVE).length
-      if (activeCount > 1) {
-        return res.status(400).json({ error: 'Only one phase can be ACTIVE at a time.' })
-      }
-
-      await db().doc(`events/${activeEvent.id}`).set({
-        competitionPhases: normalized,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: req.user.uid,
-      }, { merge: true })
-
-      // HIGH-03: Invalidate event cache — competitionPhases changed
-      invalidateEventCache()
-
-      await appendAuditLog({
-        actorUid: req.user.uid,
-        action: 'phases.update',
-        targetType: 'event',
-        targetId: activeEvent.id,
-        metadata: {
-          count: normalized.length,
-          activePhaseId: normalized.find((p) => p.status === PHASE_STATES.ACTIVE)?.id || null,
-        },
-      })
-
-      res.json({ ok: true, phases: normalized })
-    } catch (e) {
-      if (e.message) return res.status(400).json({ error: e.message })
-      next(e)
-    }
-  })
-
-  /** Transition a phase to a new state (state machine enforcement) */
-  router.post('/phases/:phaseId/transition', async (req, res, next) => {
-    try {
-      const activeEvent = await getActiveEvent()
-      if (!activeEvent) return res.status(503).json({ error: 'No active event.' })
-
-      const { phaseId } = req.params
-      const newStatus = String(req.body?.status || '').trim()
-      const { PHASE_STATES, canTransition } = await import('../services/competitionPhases.js')
-
-      if (!Object.values(PHASE_STATES).includes(newStatus)) {
-        return res.status(400).json({ error: `Invalid status. Must be one of: ${Object.values(PHASE_STATES).join(', ')}` })
-      }
-
-      const eventRef = db().doc(`events/${activeEvent.id}`)
-      const eventSnap = await eventRef.get()
-      const phases = Array.isArray(eventSnap.data()?.competitionPhases) ? eventSnap.data().competitionPhases : []
-      const idx = phases.findIndex((p) => p.id === phaseId)
-      if (idx < 0) return res.status(404).json({ error: 'Phase not found.' })
-
-      const phase = phases[idx]
-      const fromStatus = phase.status
-
-      if (!canTransition(fromStatus, newStatus)) {
-        return res.status(400).json({
-          error: `Invalid transition: ${fromStatus} → ${newStatus}. Check the state machine rules.`,
-        })
-      }
-
-      // If activating, ensure no other phase is active
-      if (newStatus === PHASE_STATES.ACTIVE) {
-        const otherActive = phases.find((p) => p.id !== phaseId && p.status === PHASE_STATES.ACTIVE)
-        if (otherActive) {
-          return res.status(400).json({ error: `Phase "${otherActive.name}" is already ACTIVE. Lock it first.` })
-        }
-      }
-
-      const updatedPhases = phases.map((p, i) => i === idx ? { ...p, status: newStatus } : p)
-      
-      // Auto-manage registrationOpen flag based on phase transitions
-      const eventPatch = {
-        competitionPhases: updatedPhases,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: req.user.uid,
-      }
-      
-      // When activating a phase with order=1 (typically registration), auto-enable registration
-      if (newStatus === PHASE_STATES.ACTIVE && phase.order === 1) {
-        eventPatch.registrationOpen = true
-      }
-      
-      // When locking or moving past the first phase, close registration
-      if (newStatus === PHASE_STATES.SUBMISSION_LOCKED && phase.order === 1) {
-        eventPatch.registrationOpen = false
-      }
-
-      // When any phase enters EVALUATION or SHORTLISTING, auto-enable judge scoring
-      if (newStatus === PHASE_STATES.EVALUATION || newStatus === PHASE_STATES.SHORTLISTING) {
-        eventPatch.evaluationsOpen = true
-      }
-
-      // When a phase moves out of EVALUATION/SHORTLISTING to COMPLETED/ARCHIVED,
-      // close evaluations (only if no other phase is still in eval/shortlisting)
-      if ((newStatus === PHASE_STATES.COMPLETED || newStatus === PHASE_STATES.ARCHIVED) &&
-          (fromStatus === PHASE_STATES.EVALUATION || fromStatus === PHASE_STATES.SHORTLISTING)) {
-        const anyOtherInEval = updatedPhases.some(p =>
-          p.id !== phaseId && (p.status === PHASE_STATES.EVALUATION || p.status === PHASE_STATES.SHORTLISTING)
-        )
-        if (!anyOtherInEval) {
-          eventPatch.evaluationsOpen = false
-        }
-      }
-      
-      // MIGRATION FIX: If any phase with order=1 is already ACTIVE, ensure registrationOpen is set
-      // This handles existing deployments where phases were activated before this auto-flag logic
-      const hasActivePhaseOne = updatedPhases.some(p => p.order === 1 && p.status === PHASE_STATES.ACTIVE)
-      if (hasActivePhaseOne && eventSnap.data()?.registrationOpen !== true) {
-        eventPatch.registrationOpen = true
-      }
-      
-      await eventRef.set(eventPatch, { merge: true })
-
-      // HIGH-03: Invalidate event cache — phase status changed
-      invalidateEventCache()
-
-      await appendAuditLog({
-        actorUid: req.user.uid,
-        action: 'phases.transition',
-        targetType: 'phase',
-        targetId: phaseId,
-        metadata: { from: fromStatus, to: newStatus, phaseName: phase.name },
-      })
-
-      res.json({ ok: true, phaseId, from: fromStatus, to: newStatus })
-    } catch (e) {
-      next(e)
-    }
-  })
-
-  /** Bulk shortlist teams for a specific phase */
-  router.post('/phases/:phaseId/shortlist', async (req, res, next) => {
-    try {
-      const { phaseId } = req.params
-      const teamIds = Array.isArray(req.body?.teamIds) ? req.body.teamIds : []
-      if (teamIds.length === 0) return res.status(400).json({ error: 'teamIds required' })
-      if (teamIds.length > 500) return res.status(400).json({ error: 'Max 500 teams per shortlist' })
-
-      // HIGH-07: Use FieldValue.arrayUnion instead of read-modify-write loop.
-      // arrayUnion is atomic and idempotent — safe under concurrent admin operations.
-      // We still check existence to count actual updates, but no longer read the array.
-      let updated = 0
-      const skipped = []
-      for (const teamId of teamIds) {
-        const teamRef = db().doc(`teams/${teamId}`)
-        const snap = await teamRef.get()
-        if (!snap.exists) { skipped.push(teamId); continue }
-        await teamRef.set({
-          shortlistedPhases: FieldValue.arrayUnion(phaseId),
-          shortlisted: true,
-          updatedAt: FieldValue.serverTimestamp(),
-        }, { merge: true })
-        updated++
-      }
-
-      await appendAuditLog({
-        actorUid: req.user.uid,
-        action: 'phases.shortlist',
-        targetType: 'phase',
-        targetId: phaseId,
-        metadata: { count: updated, skipped: skipped.length },
-      })
-
-      res.json({ ok: true, shortlisted: updated, skipped })
-    } catch (e) {
-      next(e)
-    }
-  })
-
-  /** Remove teams from a phase shortlist */
-  router.post('/phases/:phaseId/unshortlist', async (req, res, next) => {
-    try {
-      const { phaseId } = req.params
-      const teamIds = Array.isArray(req.body?.teamIds) ? req.body.teamIds : []
-      if (teamIds.length === 0) return res.status(400).json({ error: 'teamIds required' })
-
-      // HIGH-07: Use FieldValue.arrayRemove inside a transaction so the
-      // `shortlisted` flag is derived from a fresh read — prevents two concurrent
-      // unshortlist (or shortlist) operations from leaving the flag inconsistent.
-      let updated = 0
-      for (const teamId of teamIds) {
-        const teamRef = db().doc(`teams/${teamId}`)
-        const didRemove = await db().runTransaction(async (tx) => {
-          const snap = await tx.get(teamRef)
-          if (!snap.exists) return false
-          const currentPhases = Array.isArray(snap.data().shortlistedPhases) ? snap.data().shortlistedPhases : []
-          if (!currentPhases.includes(phaseId)) return false // Not in list — skip
-
-          const remaining = currentPhases.filter((p) => p !== phaseId)
-          tx.set(teamRef, {
-            shortlistedPhases: FieldValue.arrayRemove(phaseId),
-            // Clear the flag only if this was the team's last shortlisted phase.
-            shortlisted: remaining.length > 0,
-            updatedAt: FieldValue.serverTimestamp(),
-          }, { merge: true })
-          return true
-        })
-        if (didRemove) updated++
-      }
-
-      await appendAuditLog({
-        actorUid: req.user.uid,
-        action: 'phases.unshortlist',
-        targetType: 'phase',
-        targetId: phaseId,
-        metadata: { count: updated },
-      })
-
-      res.json({ ok: true, removed: updated })
-    } catch (e) {
-      next(e)
-    }
-  })
-
   router.get('/evaluation-criteria', async (req, res, next) => {
     try {
       const activeEvent = await getActiveEvent()
@@ -2006,59 +1769,11 @@ export function adminRouter() {
         return res.status(503).json({ error: 'Hackathon is starting up. Try again in a moment.' })
       }
 
-      // Compute starting order (max existing + 1)
-      let startOrder = 0
-      try {
-        const q = await db()
-          .collection('problemStatements')
-          .where('eventId', '==', eventId)
-          .orderBy('order', 'desc')
-          .limit(1)
-          .get()
-        if (!q.empty) {
-          const o = q.docs[0].data().order
-          if (typeof o === 'number') startOrder = o + 1
-        }
-      } catch {
-        const q = await db().collection('problemStatements').where('eventId', '==', eventId).limit(500).get()
-        let maxO = -1
-        for (const d of q.docs) {
-          const o = d.data().order
-          if (typeof o === 'number' && o > maxO) maxO = o
-        }
-        startOrder = maxO + 1
-      }
-
       const results = { success: 0, failed: 0, skipped: 0, errors: [], created: [] }
-      let nextOrder = startOrder
 
-      // Compute next sequential ID (skh001, skh002, ...) by scanning existing IDs in this event
-      let nextSeq = 1
-      try {
-        const allSnap = await db()
-          .collection('problemStatements')
-          .where('eventId', '==', eventId)
-          .limit(1000)
-          .get()
-        for (const d of allSnap.docs) {
-          const m = /^skh(\d+)$/i.exec(d.id)
-          if (m) {
-            const n = parseInt(m[1], 10)
-            if (!Number.isNaN(n) && n >= nextSeq) nextSeq = n + 1
-          }
-        }
-      } catch {
-        // If scan fails, fall back to 1 (collisions handled below)
-      }
-
-      // Track IDs reserved in this batch to avoid mid-batch collisions
+      // Track IDs reserved in this batch to avoid mid-batch collisions.
+      // IDs and order both come from the uploaded sheet — nothing is auto-generated.
       const usedIds = new Set()
-
-      function nextSkhId() {
-        let id = `skh${String(nextSeq).padStart(3, '0')}`
-        nextSeq += 1
-        return id
-      }
 
       for (let i = 0; i < items.length; i++) {
         const row = items[i] || {}
@@ -2071,13 +1786,23 @@ export function adminRouter() {
             continue
           }
 
-          // System-assigned sequential ID (skh001, skh002, ...). User-supplied id is ignored.
-          let psId = nextSkhId()
-          // Defensive collision check against existing docs and this batch
-          // (in case admin manually created an skh### id earlier)
-          // eslint-disable-next-line no-await-in-loop
-          while (usedIds.has(psId) || (await db().doc(`problemStatements/${psId}`).get()).exists) {
-            psId = nextSkhId()
+          // PS id is the sheet's "PS Number" (e.g. SIH26001). No auto-generation.
+          const rawPsId = String(row.id ?? row.psNumber ?? row['ps number'] ?? row.psnumber ?? row['ps_number'] ?? '').trim()
+          if (!rawPsId) {
+            results.failed += 1
+            results.errors.push({ line: lineNum, error: 'Missing required field: PS Number' })
+            continue
+          }
+          if (!isValidDocId(rawPsId)) {
+            results.failed += 1
+            results.errors.push({ line: lineNum, error: `Invalid PS Number "${rawPsId}" (no slashes or path characters).` })
+            continue
+          }
+          const psId = rawPsId
+          if (usedIds.has(psId)) {
+            results.failed += 1
+            results.errors.push({ line: lineNum, error: `Duplicate PS Number in file: ${psId}` })
+            continue
           }
           usedIds.add(psId)
 
@@ -2086,47 +1811,29 @@ export function adminRouter() {
           const organization = typeof row.organization === 'string' ? row.organization.trim().slice(0, 200) : ''
           const department = typeof row.department === 'string' ? row.department.trim().slice(0, 120) : ''
 
-          // Track (was: category) — accept "track" or legacy "category" column. Only Software/Hardware allowed.
-          const TRACKS = ['Software', 'Hardware']
+          // Category (Software/Hardware) — accept "category" (preferred) or legacy "track" column.
           let category = ''
-          const trackRaw = typeof row.track === 'string' ? row.track.trim() : (typeof row.category === 'string' ? row.category.trim() : '')
-          if (trackRaw) {
-            const matched = TRACKS.find((t) => t.toLowerCase() === trackRaw.toLowerCase())
+          const catRaw = typeof row.category === 'string' ? row.category.trim() : (typeof row.track === 'string' ? row.track.trim() : '')
+          if (catRaw) {
+            const matched = PS_CATEGORIES.find((t) => t.toLowerCase() === catRaw.toLowerCase())
             if (matched) category = matched
             else {
               results.failed += 1
-              results.errors.push({ line: lineNum, error: `Invalid track "${trackRaw}". Must be one of: ${TRACKS.join(', ')}` })
+              results.errors.push({ line: lineNum, error: `Invalid category "${catRaw}". Must be one of: ${PS_CATEGORIES.join(', ')}` })
               continue
             }
           }
 
-          // Domain (was: theme) — accept "domain" or legacy "theme" column. Must be one of 8 official domains.
-          const DOMAINS = [
-            'Health', 'Education', 'Transportation', 'Food Safety & Security',
-            'Waste Management', 'Agriculture', 'Industry & MSME Innovation', 'Open Innovation',
-          ]
-          // Normalize so common variants match the canonical domain:
-          // "and" ↔ "&", inconsistent spacing, and case are all treated as equal.
-          const normDomain = (s) => String(s)
-            .toLowerCase()
-            .replace(/\s*&\s*/g, ' & ')
-            .replace(/\s+and\s+/g, ' & ')
-            .replace(/\s+/g, ' ')
-            .trim()
-          // Explicit aliases for labels that aren't an exact official domain.
-          const DOMAIN_ALIASES = {
-            'biodiversity & waste management': 'Waste Management',
-          }
+          // Theme (subject area) — accept "theme" (preferred) or legacy "domain" column.
           let theme = ''
-          const domainRaw = typeof row.domain === 'string' ? row.domain.trim() : (typeof row.theme === 'string' ? row.theme.trim() : '')
-          if (domainRaw) {
-            const key = normDomain(domainRaw)
-            let matched = DOMAINS.find((d) => normDomain(d) === key)
-            if (!matched && DOMAIN_ALIASES[key]) matched = DOMAIN_ALIASES[key]
+          const themeRaw = typeof row.theme === 'string' ? row.theme.trim() : (typeof row.domain === 'string' ? row.domain.trim() : '')
+          if (themeRaw) {
+            const key = normTheme(themeRaw)
+            const matched = PS_THEMES.find((d) => normTheme(d) === key)
             if (matched) theme = matched
             else {
               results.failed += 1
-              results.errors.push({ line: lineNum, error: `Invalid domain "${domainRaw}". Must be one of: ${DOMAINS.join(', ')}` })
+              results.errors.push({ line: lineNum, error: `Invalid theme "${themeRaw}". Must be one of: ${PS_THEMES.join(', ')}` })
               continue
             }
           }
@@ -2147,13 +1854,13 @@ export function adminRouter() {
             if (!Number.isNaN(n) && n >= 0) maxTeams = Math.min(1_000_000, Math.floor(n))
           }
 
-          // Order: explicit or auto-incremented
-          let order = nextOrder
-          if (row.order !== undefined && row.order !== null && row.order !== '') {
-            const n = Number(row.order)
+          // Order comes from the sheet's "No" column (fallback: "order", then file position).
+          // No auto-increment — the sheet decides the order.
+          let order = i
+          const orderRaw = row.no ?? row.order
+          if (orderRaw !== undefined && orderRaw !== null && String(orderRaw).trim() !== '') {
+            const n = Number(orderRaw)
             if (!Number.isNaN(n) && Number.isFinite(n)) order = Math.round(n)
-          } else {
-            nextOrder += 1
           }
 
           const payload = {
@@ -2199,6 +1906,58 @@ export function adminRouter() {
       cacheInvalidate(CACHE_NS.PROBLEM_STATEMENTS)
 
       res.json({ ok: true, ...results, eventId })
+    } catch (e) {
+      next(e)
+    }
+  })
+
+  /**
+   * Delete ALL problem statements for the active event. Irreversible.
+   * Also clears each team's problemStatementId so no team is left pointing at a
+   * deleted PS. Does not touch judge/mentor assignments (those are re-set on import).
+   */
+  router.post('/problem-statements/delete-all', async (req, res, next) => {
+    try {
+      const activeEvent = await getActiveEvent()
+      const eventId = activeEvent?.id
+      if (!eventId) return res.status(503).json({ error: 'No active event.' })
+
+      const snap = await db().collection('problemStatements').where('eventId', '==', eventId).get()
+      const docs = snap.docs
+      let deleted = 0
+      for (let i = 0; i < docs.length; i += 400) {
+        const batch = db().batch()
+        docs.slice(i, i + 400).forEach((d) => { batch.delete(d.ref); deleted += 1 })
+        // eslint-disable-next-line no-await-in-loop
+        await batch.commit()
+      }
+
+      // Clear teams that had selected any of these problem statements for this event.
+      let teamsCleared = 0
+      try {
+        const teamsSnap = await db().collection('teams').where('eventId', '==', eventId).get()
+        const toClear = teamsSnap.docs.filter((d) => d.data().problemStatementId)
+        for (let i = 0; i < toClear.length; i += 400) {
+          const batch = db().batch()
+          toClear.slice(i, i + 400).forEach((d) => {
+            batch.set(d.ref, { problemStatementId: '', updatedAt: FieldValue.serverTimestamp() }, { merge: true })
+            teamsCleared += 1
+          })
+          // eslint-disable-next-line no-await-in-loop
+          await batch.commit()
+        }
+      } catch { /* non-fatal */ }
+
+      cacheInvalidate(CACHE_NS.PROBLEM_STATEMENTS)
+      await appendAuditLog({
+        actorUid: req.user.uid,
+        action: 'problem_statement.delete_all',
+        targetType: 'event',
+        targetId: eventId,
+        eventId,
+        metadata: { deleted, teamsCleared },
+      })
+      res.json({ ok: true, deleted, teamsCleared, eventId })
     } catch (e) {
       next(e)
     }
@@ -2324,6 +2083,36 @@ export function adminRouter() {
         metadata: {},
       })
       res.json({ ok: true })
+    } catch (e) {
+      next(e)
+    }
+  })
+
+  // ─── SIH 2026 live problem statements (reference data) ───────────────
+  // Read + manual refresh of the problem statements scraped from sih.gov.in
+  // (with the live "ideas submitted" count). This is separate from this
+  // platform's own `problemStatements` collection and never affects selection,
+  // judging or team data. GET is admin+viewer; refresh (POST) is admin-only
+  // (the router-level guard blocks viewers from any non-GET method).
+  router.get('/sih-problem-statements', async (_req, res, next) => {
+    try {
+      res.json(await getSihSnapshot())
+    } catch (e) {
+      next(e)
+    }
+  })
+
+  router.post('/sih-problem-statements/refresh', async (req, res, next) => {
+    try {
+      const snap = await refreshSihSnapshot({ force: true })
+      await appendAuditLog({
+        actorUid: req.user.uid,
+        action: 'sih.refresh',
+        targetType: 'sihScrape',
+        targetId: 'sih2026',
+        metadata: { ok: snap.ok, count: snap.count, error: snap.error || null },
+      })
+      res.json(snap)
     } catch (e) {
       next(e)
     }
@@ -2976,11 +2765,80 @@ export function adminRouter() {
   // domain+track combinations that automatically cover all matching PS.
   // Both assignment types are resolved in GET /judges/assignments.
 
-  const JUDGE_VALID_DOMAINS = [
-    'Health', 'Education', 'Transportation', 'Food Safety & Security',
-    'Waste Management', 'Agriculture', 'Industry & MSME Innovation', 'Open Innovation',
+  const JUDGE_VALID_DOMAINS = PS_THEMES
+  const JUDGE_VALID_TRACKS = PS_CATEGORIES
+
+  // Departments a judge can be assigned to (mirrors the participant registration
+  // form). A judge assigned to a department evaluates every team whose team-level
+  // department (the leader's department) matches — regardless of problem statement.
+  const JUDGE_VALID_DEPARTMENTS = [
+    'Cyber Security', 'AIDS', 'AIML', 'CSE', 'Mechanical', 'MCA', 'BCA',
+    'Integrated B.Tech', 'Integrated M.Tech', 'BBA', 'BCOM', 'MBA', 'B.SC', 'M.SC',
   ]
-  const JUDGE_VALID_TRACKS = ['Software', 'Hardware']
+
+  /** Assign a judge to a department (arrayUnion into users.assignedDepartments). */
+  router.post('/judges/assign-department', async (req, res, next) => {
+    try {
+      const { judgeId, department } = req.body || {}
+      if (!judgeId) return res.status(400).json({ error: 'judgeId required' })
+      const dept = String(department || '').trim()
+      if (!dept) return res.status(400).json({ error: 'department required' })
+      if (!JUDGE_VALID_DEPARTMENTS.includes(dept)) {
+        return res.status(400).json({ error: `Invalid department. Must be one of: ${JUDGE_VALID_DEPARTMENTS.join(', ')}` })
+      }
+
+      const userRef = db().doc(`users/${judgeId}`)
+      const userSnap = await userRef.get()
+      if (!userSnap.exists) return res.status(404).json({ error: 'User not found.' })
+      if (userSnap.data().role !== 'judge') return res.status(400).json({ error: 'User is not a judge.' })
+
+      await userRef.set(
+        { assignedDepartments: FieldValue.arrayUnion(dept), updatedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      )
+
+      await appendAuditLog({
+        actorUid: req.user.uid,
+        action: 'judge.assign_department',
+        targetType: 'user',
+        targetId: judgeId,
+        metadata: { department: dept },
+      })
+      res.json({ ok: true })
+    } catch (e) {
+      next(e)
+    }
+  })
+
+  /** Remove a department assignment from a judge. */
+  router.post('/judges/unassign-department', async (req, res, next) => {
+    try {
+      const { judgeId, department } = req.body || {}
+      if (!judgeId) return res.status(400).json({ error: 'judgeId required' })
+      const dept = String(department || '').trim()
+      if (!dept) return res.status(400).json({ error: 'department required' })
+
+      const userRef = db().doc(`users/${judgeId}`)
+      const userSnap = await userRef.get()
+      if (!userSnap.exists) return res.status(404).json({ error: 'User not found.' })
+
+      await userRef.set(
+        { assignedDepartments: FieldValue.arrayRemove(dept), updatedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      )
+
+      await appendAuditLog({
+        actorUid: req.user.uid,
+        action: 'judge.unassign_department',
+        targetType: 'user',
+        targetId: judgeId,
+        metadata: { department: dept },
+      })
+      res.json({ ok: true })
+    } catch (e) {
+      next(e)
+    }
+  })
 
   /** Assign a judge to a domain + track combination */
   router.post('/judges/assign-domain-track', async (req, res, next) => {
@@ -3261,6 +3119,7 @@ export function adminRouter() {
         displayName: d.data().displayName || '',
         assignedProblemStatementIds: Array.isArray(d.data().assignedProblemStatementIds) ? d.data().assignedProblemStatementIds : [],
         judgeAssignments: Array.isArray(d.data().judgeAssignments) ? d.data().judgeAssignments : [],
+        assignedDepartments: Array.isArray(d.data().assignedDepartments) ? d.data().assignedDepartments : [],
       }))
       res.json({ judges })
     } catch (e) {
@@ -3617,37 +3476,6 @@ export function adminRouter() {
   })
 
   /** Save timeline phases (public landing page timeline) */
-  router.put('/timeline', async (req, res, next) => {
-    try {
-      const activeEvent = await getActiveEvent()
-      if (!activeEvent) return res.status(503).json({ error: 'No active event.' })
-      const phases = Array.isArray(req.body?.phases) ? req.body.phases : []
-      // Sanitize
-      const cleaned = phases.map((p, i) => ({
-        id: p.id || `tl-${Date.now()}-${i}`,
-        phase: String(p.phase || '').trim().slice(0, 100),
-        startDate: p.startDate || null,
-        endDate: p.endDate || null,
-        description: String(p.description || '').trim().slice(0, 500),
-        status: p.status || 'upcoming',
-      })).filter((p) => p.phase)
-
-      await db().doc(`events/${activeEvent.id}`).set({
-        timelinePhases: cleaned,
-        updatedAt: FieldValue.serverTimestamp(),
-        updatedBy: req.user.uid,
-      }, { merge: true })
-
-      // HIGH-03: Invalidate event cache — timelinePhases changed
-      invalidateEventCache()
-      // Invalidate timeline cache so public page gets fresh data
-      cacheInvalidate(CACHE_NS.TIMELINE)
-      res.json({ ok: true, count: cleaned.length })
-    } catch (e) {
-      next(e)
-    }
-  })
-
   /** List all announcements (admin) */
   router.get('/announcements', async (req, res, next) => {
     try {
@@ -4347,11 +4175,8 @@ export function adminRouter() {
       if (!mentorId) return res.status(400).json({ error: 'mentorId required' })
       if (!domain && !track) return res.status(400).json({ error: 'At least one of domain or track is required' })
 
-      const VALID_DOMAINS = [
-        'Health', 'Education', 'Transportation', 'Food Safety & Security',
-        'Waste Management', 'Agriculture', 'Industry & MSME Innovation', 'Open Innovation',
-      ]
-      const VALID_TRACKS = ['Software', 'Hardware']
+      const VALID_DOMAINS = PS_THEMES
+      const VALID_TRACKS = PS_CATEGORIES
 
       if (domain && !VALID_DOMAINS.includes(domain)) {
         return res.status(400).json({ error: `Invalid domain. Must be one of: ${VALID_DOMAINS.join(', ')}` })
@@ -4699,6 +4524,14 @@ export function judgesRouter() {
   const router = Router()
   const db = () => getDb()
 
+  // A judge assigned to a department may evaluate every team whose team-level
+  // department (set from the team leader) matches one of their assigned departments.
+  const judgeDeptAllows = (profile, team) => {
+    const depts = Array.isArray(profile?.assignedDepartments) ? profile.assignedDepartments : []
+    const teamDept = String(team?.department || '').trim()
+    return Boolean(teamDept) && depts.includes(teamDept)
+  }
+
   const judgeTeamRow = (id, data, myEvaluation) => ({
     id,
     name: typeof data.name === 'string' ? data.name : 'Team',
@@ -4827,9 +4660,7 @@ export function judgesRouter() {
       const assigned = Array.isArray(profile?.assignedProblemStatementIds) ? profile.assignedProblemStatementIds : []
 
       const merged = await getActiveEventConfig()
-      const { getEvaluationPhase } = await import('../services/competitionPhases.js')
-      const evalPhase = getEvaluationPhase(merged)
-      const scoringConfig = resolveScoringConfig(merged, evalPhase)
+      const scoringConfig = resolveScoringConfig(merged, null)
       const edition = {
         submissionDeadline: tsIso(merged.submissionDeadline),
         lifecyclePhase: merged.lifecyclePhase,
@@ -4895,6 +4726,9 @@ export function judgesRouter() {
           if (merged.finalistsOnly === true && t.finalist !== true) return false
           // Direct team assignment (team.judgeIds) — include regardless of PS.
           if (Array.isArray(t.judgeIds) && t.judgeIds.includes(uid)) return true
+          // Department assignment — include every team in the judge's department(s),
+          // even before they've picked a problem statement.
+          if (judgeDeptAllows(profile, t)) return true
           if (!t.problemStatementId) return false
           // Include if matched by direct PS assignment OR by domain+track assignment
           return judgeMayEvaluateTeam(profile, t) || domainTrackPsIds.has(t.problemStatementId)
@@ -4951,7 +4785,7 @@ export function judgesRouter() {
       }
 
       const directTeamAssignedReview = Array.isArray(teamRaw.judgeIds) && teamRaw.judgeIds.includes(req.user.uid)
-      if (!directTeamAssignedReview && !judgeMayEvaluateTeam(req.profile, teamRaw)) {
+      if (!directTeamAssignedReview && !judgeDeptAllows(req.profile, teamRaw) && !judgeMayEvaluateTeam(req.profile, teamRaw)) {
         // Also check domain+track assignments
         const judgeAssignments = Array.isArray(req.profile?.judgeAssignments) ? req.profile.judgeAssignments : []
         const psId = teamRaw.problemStatementId || ''
@@ -4982,9 +4816,7 @@ export function judgesRouter() {
       if (merged.finalistsOnly === true && teamRaw.finalist !== true) {
         return res.status(403).json({ error: 'Finals judging is restricted to selected finalists.' })
       }
-      const { getEvaluationPhase: getEvalPhaseReview } = await import('../services/competitionPhases.js')
-      const evalPhaseReview = getEvalPhaseReview(merged)
-      const scoringConfig = resolveScoringConfig(merged, evalPhaseReview)
+      const scoringConfig = resolveScoringConfig(merged, null)
       const edition = {
         submissionDeadline: tsIso(merged.submissionDeadline),
         lifecyclePhase: merged.lifecyclePhase,
@@ -5147,7 +4979,7 @@ export function judgesRouter() {
       }
 
       const directTeamAssignedEval = Array.isArray(team.judgeIds) && team.judgeIds.includes(jid)
-      if (!directTeamAssignedEval && !judgeMayEvaluateTeam(req.profile, team)) {
+      if (!directTeamAssignedEval && !judgeDeptAllows(req.profile, team) && !judgeMayEvaluateTeam(req.profile, team)) {
         // Also check domain+track assignments
         const judgeAssignments = Array.isArray(req.profile?.judgeAssignments) ? req.profile.judgeAssignments : []
         let allowedByDomainTrack = false
@@ -5171,9 +5003,7 @@ export function judgesRouter() {
         }
       }
 
-      const { getEvaluationPhase: getEvalPhaseSubmit } = await import('../services/competitionPhases.js')
-      const evalPhaseSubmit = getEvalPhaseSubmit(merged)
-      const scoringConfig = resolveScoringConfig(merged, evalPhaseSubmit)
+      const scoringConfig = resolveScoringConfig(merged, null)
       const isTwoPart = scoringConfig.mode === 'twoPart'
 
       // Two-part phases require a `part` flag ('A' or 'B') identifying which
@@ -5407,8 +5237,9 @@ export function judgesRouter() {
         return res.status(403).json({ error: 'Team is outside your active event edition.' })
       }
 
-      // Access: direct team assignment, direct PS, or domain+track match.
+      // Access: direct team assignment, department match, direct PS, or domain+track match.
       let allowed = (Array.isArray(team.judgeIds) && team.judgeIds.includes(req.user.uid))
+        || judgeDeptAllows(req.profile, team)
         || judgeMayEvaluateTeam(req.profile, team)
       if (!allowed) {
         const judgeAssignments = Array.isArray(req.profile?.judgeAssignments) ? req.profile.judgeAssignments : []
@@ -5757,10 +5588,7 @@ export function mentorsRouter() {
 export function registrationDeskRouter() {
   const router = Router()
   const db = () => getDb()
-  const DOMAINS = [
-    'Health', 'Education', 'Transportation', 'Food Safety & Security',
-    'Waste Management', 'Agriculture', 'Industry & MSME Innovation', 'Open Innovation',
-  ]
+  const DOMAINS = PS_THEMES
 
   router.use(verifyFirebaseToken, loadUserRole, attachEventContext, requireRole('registration_desk', 'registration_desk_incharge', 'admin'))
 

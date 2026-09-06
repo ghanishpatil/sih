@@ -1,7 +1,7 @@
 /**
  * Script to set the active event
  * Usage: node scripts/set-active-event.js <eventId>
- * Example: node scripts/set-active-event.js skh-2026
+ * Example: node scripts/set-active-event.js sih2026
  */
 
 import { initFirebaseAdmin, getDb } from '../services/firebaseAdmin.js'

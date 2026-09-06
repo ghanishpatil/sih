@@ -17,7 +17,7 @@ export function initFirebaseAdmin() {
     if (!getApps().length) {
       initializeApp({ 
         credential: cert(cred),
-        storageBucket: 'verify-sih.firebasestorage.app'
+        storageBucket: process.env.FIREBASE_STORAGE_BUCKET || 'verify-iic.firebasestorage.app'
       })
     }
     initialized = true

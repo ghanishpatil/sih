@@ -290,8 +290,8 @@ export function ParticipantProblemsPage() {
               className="mt-4 overflow-hidden rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))]"
             >
               <div className="grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-3">
-                <FilterSelect label="Track" value={filters.track} options={tracks} onChange={(v) => setFilters((f) => ({ ...f, track: v }))} />
-                <FilterSelect label="Domain" value={filters.domain} options={domains} onChange={(v) => setFilters((f) => ({ ...f, domain: v }))} />
+                <FilterSelect label="Category" value={filters.track} options={tracks} onChange={(v) => setFilters((f) => ({ ...f, track: v }))} />
+                <FilterSelect label="Theme" value={filters.domain} options={domains} onChange={(v) => setFilters((f) => ({ ...f, domain: v }))} />
                 <FilterSelect
                   label="Participation"
                   value={filters.participation}

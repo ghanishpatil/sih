@@ -177,7 +177,6 @@ export async function getActiveEventConfig() {
         : 120,
     minTeamSize: typeof event.minTeamSize === 'number' ? event.minTeamSize : 1,
     maxTeamSize: typeof event.maxTeamSize === 'number' ? event.maxTeamSize : 4,
-    competitionPhases: Array.isArray(event.competitionPhases) ? event.competitionPhases : [],
     // Finals: admin hand-picks finalists per domain. `finalistsPerDomain` is the
     // per-domain target count (manual, different per domain). `finalistsOnly`, when
     // true, restricts finals judging to teams flagged `finalist`.

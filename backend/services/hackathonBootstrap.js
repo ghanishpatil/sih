@@ -2,8 +2,8 @@ import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from './firebaseAdmin.js'
 
 /** Single-hackathon install — auto-created in Firestore when missing (no env vars). */
-export const INSTALL_EVENT_ID = 'skh2026'
-export const INSTALL_EVENT_NAME = 'Smart Kopargaon Hackathon'
+export const INSTALL_EVENT_ID = 'sih2026'
+export const INSTALL_EVENT_NAME = 'Smart India Hackathon'
 
 let bootstrapPromise = null
 
@@ -16,7 +16,7 @@ async function runBootstrap() {
   if (!eventSnap.exists) {
     await eventRef.set({
       name: INSTALL_EVENT_NAME,
-      slug: 'skh',
+      slug: 'sih',
       lifecyclePhase: 'REGISTRATION_OPEN',
       listedPublic: true,
       registrationOpen: true,
@@ -25,7 +25,7 @@ async function runBootstrap() {
       currency: 'INR',
       active: true,
       minTeamSize: 1,
-      maxTeamSize: 4,
+      maxTeamSize: 6,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
     })

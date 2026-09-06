@@ -4,7 +4,30 @@ import { Card } from '@/components/ui/Card.jsx'
 import { Button } from '@/components/ui/Button.jsx'
 import { Input } from '@/components/ui/Input.jsx'
 
-const YEAR_OPTIONS = ['1st Year', '2nd Year', '3rd Year', '4th Year', '5th Year', 'Postgraduate']
+const YEAR_OPTIONS = ['1st Year', '2nd Year', '3rd Year', '4th Year']
+
+// Departments offered — a fixed dropdown keeps entries consistent across teams.
+const DEPARTMENT_OPTIONS = [
+  'Cyber Security',
+  'AIDS',
+  'AIML',
+  'CSE',
+  'Mechanical',
+  'MCA',
+  'BCA',
+  'Integrated B.Tech',
+  'Integrated M.Tech',
+  'BBA',
+  'BCOM',
+  'MBA',
+  'B.SC',
+  'M.SC',
+]
+
+// Shared field styling so the <select> controls line up pixel-for-pixel with <Input>.
+const FIELD_LABEL_CLASS = 'mb-1.5 block text-sm font-medium text-ink-700'
+const FIELD_SELECT_CLASS =
+  'h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-4 text-sm text-ink-900 shadow-sm transition-all duration-200 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20'
 
 function emptyMember() {
   return {
@@ -151,7 +174,7 @@ export function TeamRegistrationForm({ team, user, profile, api, maxTeamSize = 4
           <p className="mb-2 text-xs text-ink-500">
             Pick how many people are in your team, then fill each member's details below.
           </p>
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-3 gap-2.5 sm:grid-cols-6">
             {Array.from({ length: maxTeamSize }, (_, i) => i + 1).map((n) => (
               <button
                 key={n}
@@ -189,12 +212,12 @@ export function TeamRegistrationForm({ team, user, profile, api, maxTeamSize = 4
               <Input label="College Name" value={m.college} onChange={(e) => update(idx, 'college', e.target.value)} placeholder="College / Institute" maxLength={150} required />
               <Input label="College Location" value={m.collegeLocation} onChange={(e) => update(idx, 'collegeLocation', e.target.value)} placeholder="City / District" maxLength={150} required />
               <div>
-                <label className="mb-1 block text-sm font-medium text-ink-700">Year of Study</label>
+                <label className={FIELD_LABEL_CLASS}>Year of Study</label>
                 <select
                   value={m.yearOfStudy}
                   onChange={(e) => update(idx, 'yearOfStudy', e.target.value)}
                   required
-                  className="h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--page-bg))] px-3 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                  className={FIELD_SELECT_CLASS}
                 >
                   <option value="">Select year</option>
                   {YEAR_OPTIONS.map((y) => (
@@ -202,7 +225,25 @@ export function TeamRegistrationForm({ team, user, profile, api, maxTeamSize = 4
                   ))}
                 </select>
               </div>
-              <Input label="Department" value={m.department} onChange={(e) => update(idx, 'department', e.target.value)} placeholder="e.g. Computer Engineering" maxLength={100} required />
+              <div>
+                <label className={FIELD_LABEL_CLASS}>Department</label>
+                <select
+                  value={m.department}
+                  onChange={(e) => update(idx, 'department', e.target.value)}
+                  required
+                  className={FIELD_SELECT_CLASS}
+                >
+                  <option value="">Select department</option>
+                  {DEPARTMENT_OPTIONS.map((d) => (
+                    <option key={d} value={d}>{d}</option>
+                  ))}
+                </select>
+                {idx === 0 ? (
+                  <p className="mt-1.5 text-xs text-ink-500">
+                    The team leader&apos;s department is used as the team&apos;s department (for judge assignment).
+                  </p>
+                ) : null}
+              </div>
             </div>
           </div>
         ))}

@@ -7,7 +7,6 @@ import {
 } from 'lucide-react'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
 import { useParticipantWorkspace } from '@/hooks/useParticipantWorkspace.js'
-import { getActivePhase, isPhaseSubmissionOpen, phaseAcceptsSubmissions } from '@/utils/phaseStatus.js'
 import {
   displayCategory,
   displayDepartment,
@@ -51,12 +50,7 @@ export function ParticipantProblemDetailPage() {
   // Phase-aware: PPT submission is only "open" when the active phase actually
   // accepts submissions (has required artifacts) and is within its window.
   // A registration / problem-statement phase does not count as open.
-  const activePhase = eventCfg?.activePhase || getActivePhase(
-    Array.isArray(eventCfg?.competitionPhases) ? eventCfg.competitionPhases : [],
-  )
-  const submissionsOpen = activePhase
-    ? (isPhaseSubmissionOpen(activePhase) && phaseAcceptsSubmissions(activePhase))
-    : Boolean(eventCfg?.submissionsOpen)
+  const submissionsOpen = Boolean(eventCfg?.submissionsOpen)
 
   const count = typeof problem?.selectionCount === 'number' ? problem.selectionCount : 0
   const maxTeams = typeof problem?.maxTeams === 'number' ? problem.maxTeams : null

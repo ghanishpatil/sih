@@ -25,55 +25,49 @@ export const COORDINATORS = {
 // Single source of truth used by the hero CTA, auth page, and How to Register page.
 export const REGISTRATION_URL = 'https://ums.sanjivani.edu.in//EventRegistration/D0712D97-8DF'
 
+// ── Problem-statement taxonomy (shared source of truth) ──────────────────────
+// A problem statement has a CATEGORY (Software / Hardware) and a THEME (subject area).
+export const PS_CATEGORIES = ['Software', 'Hardware']
+export const PS_THEMES = [
+  'Miscellaneous',
+  'Fintech',
+  'Smart Automation',
+  'Fitness & Sports',
+  'Space Technology',
+  'Heritage & Culture',
+  'MedTech / BioTech / HealthTech',
+  'Agriculture, FoodTech & Rural Development',
+  'Smart Vehicles',
+  'Transportation & Logistics',
+  'Robotics & Drones',
+  'Clean & Green Technology',
+  'Renewable / Sustainable Energy',
+  'Disaster Management',
+  'Smart Education',
+  'Travel & Tourism',
+  'Blockchain & Cybersecurity',
+]
+
+// Landing-page theme cards. `icon` is any lucide-react icon name (resolved
+// dynamically with a Circle fallback in TracksSection).
 export const TRACKS = [
-  {
-    id: 'health',
-    title: 'Health',
-    description: 'Primary care access, diagnostics, telemedicine, and community health for rural and urban populations.',
-    icon: 'HeartPulse',
-  },
-  {
-    id: 'education',
-    title: 'Education',
-    description: 'Learning outcomes, vernacular content, skill development, and equitable access for students.',
-    icon: 'GraduationCap',
-  },
-  {
-    id: 'transportation',
-    title: 'Transportation',
-    description: 'Public transit, traffic systems, last-mile mobility, and intelligent infrastructure for safer roads.',
-    icon: 'Bus',
-  },
-  {
-    id: 'food-safety',
-    title: 'Food Safety & Security',
-    description: 'Food traceability, quality assurance, supply chain integrity, and nutritional access programs.',
-    icon: 'Utensils',
-  },
-  {
-    id: 'waste-management',
-    title: 'Waste Management',
-    description: 'Solid waste handling, recycling systems, sanitation, and circular-economy solutions.',
-    icon: 'Recycle',
-  },
-  {
-    id: 'agriculture',
-    title: 'Agriculture',
-    description: 'Crop intelligence, farmer enablement, irrigation efficiency, and agri-tech for regional farmers.',
-    icon: 'Sprout',
-  },
-  {
-    id: 'industry-msme',
-    title: 'Industry & MSME Innovation',
-    description: 'Operational efficiency, quality control, safety, automation, and digital tooling for local industries.',
-    icon: 'Factory',
-  },
-  {
-    id: 'open-innovation',
-    title: 'Open Innovation',
-    description: 'Creative solutions and breakthrough ideas that don\'t fit traditional categories but solve real-world problems.',
-    icon: 'Lightbulb',
-  },
+  { id: 'miscellaneous', title: 'Miscellaneous', description: 'Bold ideas that cut across categories and solve real-world problems.', icon: 'Shapes' },
+  { id: 'fintech', title: 'Fintech', description: 'Payments, lending, financial inclusion, and next-gen banking experiences.', icon: 'CircleDollarSign' },
+  { id: 'smart-automation', title: 'Smart Automation', description: 'Industrial and everyday automation powered by sensors, AI, and control systems.', icon: 'Cpu' },
+  { id: 'fitness-sports', title: 'Fitness & Sports', description: 'Athlete performance, wellness tracking, and technology for active lifestyles.', icon: 'Dumbbell' },
+  { id: 'space-technology', title: 'Space Technology', description: 'Satellites, geospatial data, and solutions inspired by space science.', icon: 'Rocket' },
+  { id: 'heritage-culture', title: 'Heritage & Culture', description: 'Preserving, digitizing, and celebrating art, history, and culture.', icon: 'Landmark' },
+  { id: 'medtech', title: 'MedTech / BioTech / HealthTech', description: 'Diagnostics, devices, and platforms advancing healthcare and life sciences.', icon: 'HeartPulse' },
+  { id: 'agri-foodtech', title: 'Agriculture, FoodTech & Rural Development', description: 'Farming intelligence, food systems, and rural empowerment.', icon: 'Sprout' },
+  { id: 'smart-vehicles', title: 'Smart Vehicles', description: 'Connected, electric, and autonomous mobility solutions.', icon: 'Car' },
+  { id: 'transportation-logistics', title: 'Transportation & Logistics', description: 'Supply chains, fleet routing, and intelligent movement of goods and people.', icon: 'Truck' },
+  { id: 'robotics-drones', title: 'Robotics & Drones', description: 'Autonomous machines, drones, and robotics for real-world tasks.', icon: 'Bot' },
+  { id: 'clean-green-tech', title: 'Clean & Green Technology', description: 'Sustainability, emissions reduction, and circular-economy innovation.', icon: 'Leaf' },
+  { id: 'renewable-energy', title: 'Renewable / Sustainable Energy', description: 'Solar, wind, storage, and smarter energy management.', icon: 'Sun' },
+  { id: 'disaster-management', title: 'Disaster Management', description: 'Early warning, response coordination, and resilience for communities.', icon: 'Siren' },
+  { id: 'smart-education', title: 'Smart Education', description: 'Learning outcomes, accessibility, and technology for students and teachers.', icon: 'GraduationCap' },
+  { id: 'travel-tourism', title: 'Travel & Tourism', description: 'Discovery, experiences, and technology for travelers and destinations.', icon: 'Plane' },
+  { id: 'blockchain-cybersecurity', title: 'Blockchain & Cybersecurity', description: 'Trust, security, and decentralized systems for a safer digital world.', icon: 'ShieldCheck' },
 ]
 
 export const TIMELINE = [
@@ -109,8 +103,8 @@ export const FAQ_ITEMS = [
     a: 'Yes, the registration fee is ₹600 per team (not per person). Payment must be completed before the registration deadline to confirm your team\'s spot.',
   },
   {
-    q: 'Which problem domains can we work on?',
-    a: 'There are 8 domains: Health, Education, Transportation, Food Safety & Security, Waste Management, Agriculture, Industry & MSME Innovation, and Open Innovation. Browse the Problem Statements page to choose one.',
+    q: 'Which themes can we work on?',
+    a: 'There are 17 themes spanning Fintech, Smart Automation, MedTech/BioTech/HealthTech, Space Technology, Robotics & Drones, Clean & Green Technology, Blockchain & Cybersecurity, and more. Each problem statement is also tagged as a Software or Hardware category. Browse the Problem Statements page to choose one.',
   },
   {
     q: 'How are submissions evaluated?',
@@ -119,7 +113,7 @@ export const FAQ_ITEMS = [
 ]
 
 export const STATS = [
-  { label: 'Problem Domains', value: '8' },
+  { label: 'Problem Themes', value: '17' },
   { label: 'Expected Teams', value: '250+' },
   { label: 'Partner Departments', value: '12+' },
   { label: 'Mentor Hours', value: '2k+' },

@@ -7,6 +7,7 @@ import compression from 'compression'
 import rateLimit from 'express-rate-limit'
 import { initFirebaseAdmin } from './services/firebaseAdmin.js'
 import { ensureHackathonInstall } from './services/hackathonBootstrap.js'
+import { startSihAutoRefresh } from './services/sihScraper.js'
 import { publicRouter, adminRouter, judgesRouter, mentorsRouter, registrationDeskRouter } from './routes/api.js'
 import { participantRouter } from './routes/participant.js'
 import chatRouter from './routes/chat.js'
@@ -163,6 +164,10 @@ app.use('/api/event-config', (_req, res, next) => {
 })
 app.use('/api/problem-statements', (_req, res, next) => {
   res.set('Cache-Control', 'private, max-age=60, stale-while-revalidate=120')
+  next()
+})
+app.use('/api/sih-problem-statements', (_req, res, next) => {
+  res.set('Cache-Control', 'private, max-age=120, stale-while-revalidate=300')
   next()
 })
 app.use('/api/timeline', (_req, res, next) => {
@@ -413,4 +418,11 @@ app.listen(port, () => {
   void ensureHackathonInstall().catch((e) => {
     console.warn('[skh-backend] Hackathon bootstrap skipped:', e.message)
   })
+  // Begin periodic background scraping of SIH 2026 problem statements (live
+  // submitted-idea counts). Fire-and-forget; never blocks or crashes boot.
+  try {
+    startSihAutoRefresh()
+  } catch (e) {
+    console.warn('[skh-backend] SIH auto-refresh not started:', e.message)
+  }
 })

@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, Upload, Download, FileSpreadsheet, X, CheckC
 import { usePageSeo } from '@/hooks/usePageSeo.js'
 import { useApi } from '@/hooks/useApi.js'
 import { useEvent } from '@/context/EventContext.jsx'
-import { APP } from '@/utils/constants.js'
+import { APP, PS_THEMES, PS_CATEGORIES } from '@/utils/constants.js'
 import {
   displayCategory,
   displayOrganization,
@@ -18,23 +18,15 @@ import { Input, Textarea } from '@/components/ui/Input.jsx'
 import { Badge } from '@/components/ui/Badge.jsx'
 import { Skeleton } from '@/components/ui/Skeleton.jsx'
 import { parseCSV, buildProblemStatementTemplate, buildSuperPsTemplate, downloadCSV } from '@/utils/csvParser.js'
+import { SihProblemStatements } from '@/components/problems/SihProblemStatements.jsx'
 
 // Problem-statement types (origin). Curated is the default (no origin stored).
 // 'super_ps' is the flagship tier; 'open_innovation' is participant-authored.
 const PS_TYPE = { CURATED: 'curated', SUPER: 'super_ps', OPEN_INNOVATION: 'open_innovation' }
 
-// Official SKH track and domain lists
-const TRACK_OPTIONS = ['Software', 'Hardware']
-const DOMAIN_OPTIONS = [
-  'Health',
-  'Education',
-  'Transportation',
-  'Food Safety & Security',
-  'Waste Management',
-  'Agriculture',
-  'Industry & MSME Innovation',
-  'Open Innovation',
-]
+// Official SKH category (Software/Hardware) and theme lists — shared source of truth.
+const TRACK_OPTIONS = PS_CATEGORIES
+const DOMAIN_OPTIONS = PS_THEMES
 
 function slugPreview(raw) {
   const s = String(raw || '')
@@ -56,6 +48,45 @@ export function AdminProblemsPage() {
   const [edits, setEdits] = useState({})
   const [msg, setMsg] = useState('')
 
+  // ── SIH 2026 live problem statements (external reference from sih.gov.in) ──
+  // Read-only reference data with the live "ideas submitted" count. Kept fully
+  // separate from this platform's own problemStatements (no selection/judging).
+  const [sihItems, setSihItems] = useState([])
+  const [sihMeta, setSihMeta] = useState({})
+  const [sihLoading, setSihLoading] = useState(true)
+  const [sihRefreshing, setSihRefreshing] = useState(false)
+
+  const loadSih = useCallback(async () => {
+    try {
+      const data = await api.listAdminSihProblemStatements()
+      setSihItems(Array.isArray(data?.items) ? data.items : [])
+      setSihMeta(data || {})
+    } catch {
+      setSihItems([])
+      setSihMeta({ ok: false, error: 'Failed to load' })
+    } finally {
+      setSihLoading(false)
+    }
+  }, [api])
+
+  useEffect(() => {
+    void loadSih()
+  }, [loadSih])
+
+  const refreshSih = useCallback(async () => {
+    setSihRefreshing(true)
+    try {
+      const data = await api.refreshSihProblemStatements()
+      if (Array.isArray(data?.items)) setSihItems(data.items)
+      setSihMeta(data || {})
+    } catch (e) {
+      // e.g. Observer accounts cannot refresh — keep the last-good data on screen.
+      setSihMeta((m) => ({ ...m, ok: false, error: e.message || 'Refresh failed' }))
+    } finally {
+      setSihRefreshing(false)
+    }
+  }, [api])
+
   const [newId, setNewId] = useState('')
   const [newTitle, setNewTitle] = useState('')
   const [newOrganization, setNewOrganization] = useState('')
@@ -73,6 +104,10 @@ export function AdminProblemsPage() {
   const [typeFilter, setTypeFilter] = useState('all')
 
   const [openPsIds, setOpenPsIds] = useState(() => new Set())
+
+  // Delete-all-PS state (two-step confirm)
+  const [deletingAll, setDeletingAll] = useState(false)
+  const [confirmDeleteAll, setConfirmDeleteAll] = useState(false)
 
   // Bulk delete state
   const [selectedIds, setSelectedIds] = useState(() => new Set())
@@ -283,6 +318,21 @@ export function AdminProblemsPage() {
       setLoading(false)
     }
   }, [eventId])
+
+  const deleteAllPs = useCallback(async () => {
+    setDeletingAll(true)
+    try {
+      const res = await api.deleteAllProblemStatements()
+      setConfirmDeleteAll(false)
+      setSelectedIds(new Set())
+      await load()
+      window.alert(`Deleted ${res?.deleted ?? 0} problem statement(s).${res?.teamsCleared ? ` Cleared ${res.teamsCleared} team selection(s).` : ''}`)
+    } catch (e) {
+      window.alert(e?.message || 'Delete all failed.')
+    } finally {
+      setDeletingAll(false)
+    }
+  }, [api, load])
 
   useEffect(() => {
     void load()
@@ -625,7 +675,7 @@ export function AdminProblemsPage() {
             </div>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-ink-700">Track</label>
+                <label className="mb-1.5 block text-sm font-medium text-ink-700">Category</label>
                 <select
                   value={edits[ps.id]?.category ?? displayCategory(ps) ?? ''}
                   onChange={(e) =>
@@ -636,14 +686,14 @@ export function AdminProblemsPage() {
                   }
                   className="h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 text-sm text-ink-900 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 >
-                  <option value="">— Select track —</option>
+                  <option value="">— Select category —</option>
                   {TRACK_OPTIONS.map((t) => (
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-ink-700">Domain</label>
+                <label className="mb-1.5 block text-sm font-medium text-ink-700">Theme</label>
                 <select
                   value={edits[ps.id]?.theme ?? displayTheme(ps) ?? ''}
                   onChange={(e) =>
@@ -654,7 +704,7 @@ export function AdminProblemsPage() {
                   }
                   className="h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 text-sm text-ink-900 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                 >
-                  <option value="">— Select domain —</option>
+                  <option value="">— Select theme —</option>
                   {DOMAIN_OPTIONS.map((d) => (
                     <option key={d} value={d}>{d}</option>
                   ))}
@@ -814,28 +864,28 @@ export function AdminProblemsPage() {
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-700">Track</label>
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">Category</label>
             <select
               value={newCategory}
               disabled={creating}
               onChange={(e) => setNewCategory(e.target.value)}
               className="h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 text-sm text-ink-900 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
             >
-              <option value="">— Select track —</option>
+              <option value="">— Select category —</option>
               {TRACK_OPTIONS.map((t) => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>
           </div>
           <div>
-            <label className="mb-1.5 block text-sm font-medium text-ink-700">Domain</label>
+            <label className="mb-1.5 block text-sm font-medium text-ink-700">Theme</label>
             <select
               value={newTheme}
               disabled={creating}
               onChange={(e) => setNewTheme(e.target.value)}
               className="h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 text-sm text-ink-900 transition-colors focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20 disabled:opacity-50"
             >
-              <option value="">— Select domain —</option>
+              <option value="">— Select theme —</option>
               {DOMAIN_OPTIONS.map((d) => (
                 <option key={d} value={d}>{d}</option>
               ))}
@@ -877,6 +927,16 @@ export function AdminProblemsPage() {
         </Button>
       </Card>
 
+      {/* SIH 2026 — live problem statements scraped from sih.gov.in (reference only).
+          Separate from the editable problem bank above; shows the live submitted count. */}
+      <SihProblemStatements
+        items={sihItems}
+        meta={sihMeta}
+        loading={sihLoading}
+        onRefresh={refreshSih}
+        refreshing={sihRefreshing}
+      />
+
       {/* Filter problem statements by type (separate dropdown for the PS tab) */}
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-[rgb(var(--border))] bg-[rgb(var(--surface-muted))]/40 px-4 py-3">
         <label htmlFor="ps-type-filter" className="text-sm font-medium text-ink-700">Filter by type</label>
@@ -894,6 +954,30 @@ export function AdminProblemsPage() {
         <span className="text-xs text-ink-500">
           {curatedRows.length} curated · {superRows.length} super PS · {openInnovationRows.length} open innovation
         </span>
+        <div className="ml-auto flex items-center gap-2">
+          {confirmDeleteAll ? (
+            <>
+              <span className="text-xs font-medium text-red-700">Delete ALL problem statements for this event?</span>
+              <Button type="button" variant="danger" size="sm" disabled={deletingAll} onClick={() => void deleteAllPs()}>
+                {deletingAll ? 'Deleting…' : 'Yes, delete all'}
+              </Button>
+              <Button type="button" variant="secondary" size="sm" disabled={deletingAll} onClick={() => setConfirmDeleteAll(false)}>
+                Cancel
+              </Button>
+            </>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              disabled={rows.length === 0}
+              onClick={() => setConfirmDeleteAll(true)}
+              className="gap-1.5 border-red-500/40 text-red-700 hover:bg-red-500/5"
+            >
+              <Trash2 className="h-4 w-4" /> Delete all
+            </Button>
+          )}
+        </div>
       </div>
 
       {showCurated ? (
@@ -1024,13 +1108,13 @@ export function AdminProblemsPage() {
                         onChange={(ev) => setEdits((prev) => ({ ...prev, [ps.id]: { ...prev[ps.id], title: ev.target.value } }))}
                       />
                       <div>
-                        <label className="mb-1.5 block text-sm font-medium text-ink-700">Track</label>
+                        <label className="mb-1.5 block text-sm font-medium text-ink-700">Category</label>
                         <select
                           value={e.category ?? ps.category ?? ''}
                           onChange={(ev) => setEdits((prev) => ({ ...prev, [ps.id]: { ...prev[ps.id], category: ev.target.value } }))}
                           className="h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                         >
-                          <option value="">— Select track —</option>
+                          <option value="">— Select category —</option>
                           {TRACK_OPTIONS.map((t) => <option key={t} value={t}>{t}</option>)}
                         </select>
                       </div>
@@ -1108,6 +1192,10 @@ export function AdminProblemsPage() {
                 <p className="text-xs font-bold uppercase tracking-wide text-ink-500">Expected columns</p>
                 <div className="mt-2 grid gap-2 text-xs sm:grid-cols-2">
                   <div className="rounded-lg bg-[rgb(var(--surface-muted))]/60 p-2 sm:col-span-2">
+                    <p><code className="font-mono font-bold text-ink-900">PS Number</code> <span className="text-red-600">*required</span></p>
+                    <p className="mt-0.5 text-ink-500">Unique ID from your sheet (e.g. SIH26001). Becomes the problem-statement ID.</p>
+                  </div>
+                  <div className="rounded-lg bg-[rgb(var(--surface-muted))]/60 p-2 sm:col-span-2">
                     <p><code className="font-mono font-bold text-ink-900">title</code> <span className="text-red-600">*required</span></p>
                     <p className="mt-0.5 text-ink-500">The problem statement name (max 200 chars)</p>
                   </div>
@@ -1120,12 +1208,12 @@ export function AdminProblemsPage() {
                     <p className="mt-0.5 text-ink-500">Department offering the challenge</p>
                   </div>
                   <div className="rounded-lg bg-[rgb(var(--surface-muted))]/60 p-2">
-                    <p><code className="font-mono font-bold text-ink-900">track</code></p>
+                    <p><code className="font-mono font-bold text-ink-900">Category</code></p>
                     <p className="mt-0.5 text-ink-500">Must be exactly: <strong>Software</strong> or <strong>Hardware</strong></p>
                   </div>
                   <div className="rounded-lg bg-[rgb(var(--surface-muted))]/60 p-2">
-                    <p><code className="font-mono font-bold text-ink-900">domain</code></p>
-                    <p className="mt-0.5 text-ink-500">One of: Health · Education · Transportation · Food Safety &amp; Security · Waste Management · Agriculture · Industry &amp; MSME Innovation · Open Innovation</p>
+                    <p><code className="font-mono font-bold text-ink-900">Theme</code></p>
+                    <p className="mt-0.5 text-ink-500">One of the 17 official themes (e.g. Fintech · Smart Automation · MedTech / BioTech / HealthTech · Disaster Management · Blockchain &amp; Cybersecurity …)</p>
                   </div>
                   <div className="rounded-lg bg-[rgb(var(--surface-muted))]/60 p-2 sm:col-span-2">
                     <p><code className="font-mono font-bold text-ink-900">description</code></p>
@@ -1140,11 +1228,11 @@ export function AdminProblemsPage() {
                     <p className="mt-0.5 text-ink-500">Optional cap on team selection count</p>
                   </div>
                   <div className="rounded-lg bg-[rgb(var(--surface-muted))]/60 p-2 sm:col-span-2">
-                    <p><code className="font-mono font-bold text-ink-900">order</code></p>
-                    <p className="mt-0.5 text-ink-500">Display order (auto-incremented from current max if blank)</p>
+                    <p><code className="font-mono font-bold text-ink-900">No</code></p>
+                    <p className="mt-0.5 text-ink-500">Row number from your sheet — sets the display order. Not auto-generated.</p>
                   </div>
                   <div className="col-span-full rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-2.5">
-                    <p className="text-emerald-800"><strong>Note:</strong> The system auto-assigns sequential PS Numbers (skh001, skh002, …). You don't need an <code className="font-mono">id</code> column.</p>
+                    <p className="text-emerald-800"><strong>Note:</strong> The <code className="font-mono">PS Number</code> (e.g. SIH26001) from your sheet becomes the problem-statement ID, and <code className="font-mono">No</code> sets the order. Nothing is auto-generated.</p>
                   </div>
                 </div>
               </div>
