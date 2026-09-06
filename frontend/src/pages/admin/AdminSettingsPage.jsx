@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Settings, Info, Eye, Trophy, Mail, CheckCircle, AlertTriangle, XCircle, RefreshCw, Loader2, Check, UserPlus, Send, Upload, Download, Gavel, Handshake } from 'lucide-react'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
@@ -448,7 +448,7 @@ export function AdminSettingsPage() {
   usePageSeo({ title: 'Settings', description: 'Event configuration.' })
   const api = useApi()
   const { eventId, eventCfg } = useEvent()
-  const [eventForm, setEventForm] = useState({
+  const [eventForm, setEventFormRaw] = useState({
     registrationOpen: true,
     submissionsOpen: false,
     evaluationsOpen: false,
@@ -466,15 +466,25 @@ export function AdminSettingsPage() {
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState(null) // { type: 'success' | 'error', text }
 
+  // Tracks unsaved edits. EventContext refreshes eventCfg periodically, and
+  // without this the sync effect below would wipe out toggles the admin has
+  // flipped but not saved yet.
+  const dirtyRef = useRef(false)
+  const setEventForm = useCallback((updater) => {
+    dirtyRef.current = true
+    setEventFormRaw(updater)
+  }, [])
+
   function showToast(type, text) {
     setToast({ type, text })
     setTimeout(() => setToast(null), 3500)
   }
 
-  // Sync form state with eventCfg from context (includes real-time updates)
+  // Sync form state with eventCfg from context (includes real-time updates).
+  // Skipped while the admin has unsaved changes.
   useEffect(() => {
-    if (!eventCfg) return
-    setEventForm({
+    if (!eventCfg || dirtyRef.current) return
+    setEventFormRaw({
       registrationOpen: Boolean(eventCfg.registrationOpen),
       submissionsOpen: Boolean(eventCfg.submissionsOpen),
       evaluationsOpen: Boolean(eventCfg.evaluationsOpen),
@@ -508,6 +518,8 @@ export function AdminSettingsPage() {
         minTeamSize: Number(eventForm.minTeamSize) || 2,
         maxTeamSize: Number(eventForm.maxTeamSize) || 4,
       })
+      // Saved — let live config updates flow into the form again.
+      dirtyRef.current = false
       showToast('success', 'Settings saved successfully')
     } catch (e) {
       showToast('error', e.message || 'Save failed.')

@@ -16,9 +16,18 @@ const EventContext = createContext(null)
  * 3. The snapshot data is merged with the API-computed fields (activePhase,
  *    razorpayConfigured, etc.) so consumers always have a complete config.
  *
- * Result: phase changes by admin are reflected on participant dashboards
- * and submission pages instantly — no polling, no manual refresh needed.
+ * 4. IMPORTANT: the listener in step 2 only works for admins — `firestore.rules`
+ *    restricts `events/{id}` reads to admins so the raw document (rubrics, fees,
+ *    phases) is never exposed to participants. For everyone else the snapshot
+ *    fails silently, so we ALSO refresh the curated API snapshot on tab focus and
+ *    on an interval. Without that, participants keep whatever config existed at
+ *    page load and admin toggles (Submissions/Challenges/Matchmaking) appear to
+ *    do nothing on their side.
+ *
+ * Result: admins see changes instantly; participants within ~30s, or immediately
+ * when they focus the tab.
  */
+const CONFIG_REFRESH_MS = 30_000
 export function EventProvider({ children }) {
   const [eventId, setEventId] = useState(() => {
     try { return sessionStorage.getItem('skh_eventId') || '' } catch { return '' }
@@ -29,31 +38,66 @@ export function EventProvider({ children }) {
   // so we can merge them with Firestore snapshot updates
   const apiFieldsRef = useRef({})
 
+  // Applies a curated API snapshot to state. Shared by the initial load and the
+  // refresh path so both stay in sync.
+  const applyConfig = useCallback((cfg) => {
+    if (!cfg) return
+    const id = String(cfg.eventId || '')
+    if (id) {
+      setEventId(id)
+      try { sessionStorage.setItem('skh_eventId', id) } catch { /* storage unavailable (private mode) */ }
+    }
+    // Store API-computed fields for merging with Firestore snapshots
+    apiFieldsRef.current = {
+      razorpayConfigured: cfg.razorpayConfigured,
+      razorpayKeyId: cfg.razorpayKeyId,
+    }
+    setEventCfg(cfg)
+  }, [])
+
   // Step 1: Fetch initial config from API (gets computed fields + eventId)
   useEffect(() => {
     let cancelled = false
     publicApi
       .getEventConfig()
-      .then((cfg) => {
-        if (cancelled || !cfg) return
-        const id = String(cfg.eventId || '')
-        if (id) {
-          setEventId(id)
-          try { sessionStorage.setItem('skh_eventId', id) } catch {}
-        }
-        // Store API-computed fields for merging with Firestore snapshots
-        apiFieldsRef.current = {
-          razorpayConfigured: cfg.razorpayConfigured,
-          razorpayKeyId: cfg.razorpayKeyId,
-        }
-        setEventCfg(cfg)
-      })
+      .then((cfg) => { if (!cancelled) applyConfig(cfg) })
       .catch(() => {})
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [])
+  }, [applyConfig])
+
+  // Step 4: Refresh the curated snapshot on an interval and whenever the tab
+  // regains focus. This is the ONLY path by which non-admins ever see an event
+  // setting change, because their Firestore listener is denied by the rules.
+  useEffect(() => {
+    let cancelled = false
+    let inFlight = false
+
+    const refresh = async () => {
+      if (cancelled || inFlight) return
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      inFlight = true
+      try {
+        const cfg = await publicApi.getEventConfigFresh()
+        if (!cancelled) applyConfig(cfg)
+      } catch { /* offline or transient — keep the last known config */ }
+      finally { inFlight = false }
+    }
+
+    const id = globalThis.setInterval(refresh, CONFIG_REFRESH_MS)
+    const onVisible = () => { if (document.visibilityState === 'visible') void refresh() }
+    globalThis.addEventListener?.('focus', refresh)
+    document.addEventListener?.('visibilitychange', onVisible)
+
+    return () => {
+      cancelled = true
+      globalThis.clearInterval(id)
+      globalThis.removeEventListener?.('focus', refresh)
+      document.removeEventListener?.('visibilitychange', onVisible)
+    }
+  }, [applyConfig])
 
   // Step 2: Real-time Firestore listener on events/{eventId}
   // Fires instantly whenever admin saves any change to the event document

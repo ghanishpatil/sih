@@ -31,7 +31,7 @@ async function cachedRequest(path) {
   return data
 }
 
-async function request(path, { method = 'GET', token, body, headers = {}, eventId } = {}) {
+async function request(path, { method = 'GET', token, body, headers = {}, eventId, noStore = false } = {}) {
   const mergedHeaders = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -42,6 +42,10 @@ async function request(path, { method = 'GET', token, body, headers = {}, eventI
     method,
     headers: mergedHeaders,
     body: body ? JSON.stringify(body) : undefined,
+    // `no-store` is required for polling endpoints: /api/event-config is sent
+    // with `Cache-Control: private, max-age=30`, which would otherwise let the
+    // browser serve a stale config and hide admin changes.
+    ...(noStore ? { cache: 'no-store' } : {}),
   })
   const text = await res.text()
   let data
@@ -65,6 +69,19 @@ export const publicApi = {
   getEventConfig: (eventId) =>
     cachedRequest(
       `/api/event-config${eventId ? `?eventId=${encodeURIComponent(eventId)}` : ''}`,
+    ),
+  /**
+   * Uncached, cache-busted event config.
+   *
+   * Participants cannot read `events/{id}` directly (firestore.rules restricts it
+   * to admins), so their live Firestore listener never fires and the cached read
+   * above would pin them to whatever config existed at page load. This is what
+   * EventContext polls so admin toggles actually reach participants.
+   */
+  getEventConfigFresh: (eventId) =>
+    request(
+      `/api/event-config?${eventId ? `eventId=${encodeURIComponent(eventId)}&` : ''}_=${Date.now()}`,
+      { noStore: true },
     ),
   listProblemStatements: (eventId) =>
     cachedRequest(
