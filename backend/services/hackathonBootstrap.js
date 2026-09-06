@@ -3,7 +3,7 @@ import { getDb } from './firebaseAdmin.js'
 
 /** Single-hackathon install — auto-created in Firestore when missing (no env vars). */
 export const INSTALL_EVENT_ID = 'sih2026'
-export const INSTALL_EVENT_NAME = 'Smart India Hackathon'
+export const INSTALL_EVENT_NAME = 'Internal Smart India Hackathon'
 
 let bootstrapPromise = null
 

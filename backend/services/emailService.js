@@ -12,6 +12,7 @@
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import { existsSync } from 'fs'
+import { BRAND, SOCIALS, EMAIL_COLORS, brandAssets, brandWebsiteLabel } from './brand.js'
 
 // Directory holding email templates and attachments (e.g. the How-to-Register PDF).
 const TEMPLATES_DIR = join(dirname(fileURLToPath(import.meta.url)), 'emailTemplates')
@@ -102,7 +103,7 @@ function getFrontendUrl() {
   const url = process.env.FRONTEND_URL || ''
   if (!url) {
     console.warn('[Email] FRONTEND_URL is not set — email links will be broken.')
-    return 'https://skh.example.com'
+    return 'https://sih.example.com'
   }
   // Strip trailing slash
   return url.replace(/\/$/, '')
@@ -124,38 +125,42 @@ function escapeHtml(str) {
 /** Branded CTA button (email-safe, table-based). */
 function ctaButton(text, url) {
   if (!text || !url) return ''
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:22px auto 4px;"><tr><td align="center" bgcolor="#185983" style="border-radius:8px;"><a href="${url}" target="_blank" style="display:inline-block;padding:13px 32px;font-family:'Inter',Arial,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">${text}</a></td></tr></table>`
+  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:22px auto 4px;"><tr><td align="center" bgcolor="${EMAIL_COLORS.primary}" style="border-radius:8px;"><a href="${url}" target="_blank" style="display:inline-block;padding:13px 32px;font-family:'Inter',Arial,sans-serif;font-size:15px;font-weight:700;color:#ffffff;text-decoration:none;border-radius:8px;">${text}</a></td></tr></table>`
 }
 
 /**
- * Shared branded email shell — consistent SKH gif header + footer for every
+ * Shared branded email shell — consistent header + footer for every
  * participant email. `bodyHtml` is the inner content (already HTML-escaped).
+ *
+ * The header wordmark is rendered as live text (not an image) so the brand is
+ * always correct and stays readable when a client blocks remote images.
  */
 function renderBrandedEmail({ title, bodyHtml }) {
   const base = getFrontendUrl()
+  const assets = brandAssets(base)
   const year = new Date().getFullYear()
+  const c = EMAIL_COLORS
   return `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"><link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&display=swap" rel="stylesheet"></head>
-<body style="margin:0;padding:0;background-color:#f2f6f9;font-family:'Inter',Arial,sans-serif;">
-<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:#f2f6f9;"><tr><td align="center" style="padding:20px 12px;">
+<body style="margin:0;padding:0;background-color:${c.page};font-family:'Inter',Arial,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" role="presentation" style="background-color:${c.page};"><tr><td align="center" style="padding:20px 12px;">
 <table width="600" cellpadding="0" cellspacing="0" role="presentation" style="max-width:600px;width:100%;background:#ffffff;border-radius:10px;overflow:hidden;box-shadow:0 2px 10px rgba(15,23,42,0.08);">
-<tr><td align="center" style="padding:0;background:#ffffff;"><img src="${base}/email-logos.png" alt="Partners" width="600" style="display:block;width:100%;max-width:600px;height:auto;"></td></tr>
-<tr><td align="center" style="padding:34px 20px 6px;background:#e6f4ff;"><img src="${base}/skh.gif" alt="Smart Kopargaon Hackathon" width="420" style="display:block;width:100%;max-width:420px;height:auto;margin:0 auto;"></td></tr>
-<tr><td align="center" style="padding:0 20px 30px;background:#e6f4ff;"><h2 style="margin:0;color:#185983;font-family:'Space Grotesk',Arial,sans-serif;font-size:22px;font-weight:700;">Smart Kopargaon Hackathon</h2></td></tr>
+<tr><td align="center" style="padding:0;background:#ffffff;"><img src="${assets.partners}" alt="Partners" width="600" style="display:block;width:100%;max-width:600px;height:auto;"></td></tr>
+<tr><td align="center" style="padding:32px 20px 10px;background:${c.wash};"><img src="${assets.logo}" alt="${BRAND.name}" width="181" style="display:block;border:0;width:181px;max-width:100%;height:auto;margin:0 auto;"></td></tr>
+<tr><td align="center" style="padding:0 20px 8px;background:${c.wash};"><h2 style="margin:0;color:${c.primary};font-family:'Space Grotesk',Arial,sans-serif;font-size:24px;font-weight:700;line-height:1.25;">${BRAND.name}</h2></td></tr>
 <tr><td style="padding:34px 40px 36px;background:#ffffff;">
 <h1 style="margin:0 0 18px;color:#0f172a;font-family:'Space Grotesk',Arial,sans-serif;font-size:25px;font-weight:700;line-height:1.3;">${title}</h1>
 <div style="color:#334155;font-size:15px;line-height:1.65;">${bodyHtml}</div>
 </td></tr>
-<tr><td align="center" style="padding:30px 40px 20px;background:#185983;">
+<tr><td align="center" style="padding:30px 40px 20px;background:${c.primary};">
 <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto 16px;"><tr>
-<td style="padding:0 8px;"><a href="https://x.com/skhackathon" target="_blank"><img src="${base}/email-x.png" alt="X" width="30" style="display:block;border:0;width:30px;height:30px;"></a></td>
-<td style="padding:0 8px;"><a href="https://instagram.com/smartkophack.su" target="_blank"><img src="${base}/email-ig.png" alt="Instagram" width="30" style="display:block;border:0;width:30px;height:30px;"></a></td>
+<td style="padding:0 8px;"><a href="${SOCIALS.twitter}" target="_blank"><img src="${assets.iconX}" alt="X" width="30" style="display:block;border:0;width:30px;height:30px;"></a></td>
+<td style="padding:0 8px;"><a href="${SOCIALS.instagram}" target="_blank"><img src="${assets.iconInstagram}" alt="Instagram" width="30" style="display:block;border:0;width:30px;height:30px;"></a></td>
 </tr></table>
-<p style="margin:0 0 4px;font-size:16px;font-weight:700;color:#ffffff;">Smart Kopargaon Hackathon</p>
-<p style="margin:0 0 14px;font-size:13px;color:#a9d4ec;">Powered by Sanjivani University</p>
-<p style="margin:0 0 6px;font-size:14px;"><a href="${base}" target="_blank" style="color:#ffffff;text-decoration:underline;font-weight:600;">skh.sanjivaniuniversity.com</a></p>
-<p style="margin:0;font-size:13px;color:#a9d4ec;">Kopargaon, Maharashtra, India</p>
+<p style="margin:0 0 14px;font-size:16px;font-weight:700;color:#ffffff;">${BRAND.name}</p>
+<p style="margin:0 0 6px;font-size:14px;"><a href="${base}" target="_blank" style="color:#ffffff;text-decoration:underline;font-weight:600;">${brandWebsiteLabel(base)}</a></p>
+<p style="margin:0;font-size:13px;color:${c.muted};">${BRAND.location}</p>
 </td></tr>
-<tr><td align="center" style="padding:14px 20px;background:#124a6e;"><p style="margin:0;font-size:12px;color:#a9d4ec;">&copy; ${year} Smart Kopargaon Hackathon &middot; All rights reserved.</p></td></tr>
+<tr><td align="center" style="padding:14px 20px;background:${c.primaryDark};"><p style="margin:0;font-size:12px;color:${c.muted};">&copy; ${year} ${BRAND.name} &middot; All rights reserved.</p></td></tr>
 </table></td></tr></table></body></html>`
 }
 
@@ -175,8 +180,8 @@ async function sendEmail({ to, toName, subject, htmlContent, textContent, params
     return { success: false, error: 'Invalid recipient email' }
   }
 
-  const fromName = process.env.EMAIL_FROM_NAME || 'Smart Kopargaon Hackathon'
-  const fromAddr = process.env.EMAIL_FROM_ADDRESS || process.env.SMTP_USER || 'noreply@skh.com'
+  const fromName = process.env.EMAIL_FROM_NAME || BRAND.name
+  const fromAddr = process.env.EMAIL_FROM_ADDRESS || process.env.SMTP_USER || 'noreply@sanjivaniuniversity.com'
 
   // ─── Preferred: SMTP (best deliverability from an authenticated domain) ───
   const smtp = await getSmtpTransport()
@@ -270,7 +275,7 @@ async function sendEmail({ to, toName, subject, htmlContent, textContent, params
 // 0. Account Created Email — sent once when a user signs up (any method)
 export async function sendAccountCreatedEmail({ to, name, eventName }) {
   const safeName = escapeHtml(name || 'Participant')
-  const safeEventName = escapeHtml(eventName || 'Smart Kopargaon Hackathon')
+  const safeEventName = escapeHtml(eventName || BRAND.name)
   const subject = `You're registered for ${safeEventName} 🎉`
   const bodyHtml = `
     <p style="margin:0 0 14px;"><strong>Hi ${safeName},</strong></p>
@@ -282,7 +287,7 @@ export async function sendAccountCreatedEmail({ to, name, eventName }) {
       <li style="margin-bottom:8px;"><strong>Build and submit</strong><br><span style="color:#64748b;font-size:14px;">Upload your PPT and finalize before the deadline.</span></li>
     </ol>
     ${ctaButton('Go to Dashboard', `${getFrontendUrl()}/dashboard`)}
-    <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Have questions? Reach the organizers at <a href="mailto:skh@sanjivani.edu.in" style="color:#185983;">skh@sanjivani.edu.in</a>. Good luck! 🚀</p>
+    <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Have questions? Reach the organizers at <a href="mailto:${BRAND.supportEmail}" style="color:${EMAIL_COLORS.primary};">${BRAND.supportEmail}</a>. Good luck! 🚀</p>
   `
   const htmlContent = renderBrandedEmail({ title: `Welcome to ${safeEventName}! 🎉`, bodyHtml })
   return sendEmail({ to, toName: name, subject, htmlContent })
@@ -433,7 +438,7 @@ export async function sendTeamMemberJoinedEmail({ to, name, teamName, newMemberN
   return sendEmail({ to, toName: name, subject, htmlContent })
 }
 
-// 7. Admin Announcement Email using SKH branded template
+// 7. Admin Announcement Email using the branded template
 export async function sendAnnouncementEmail({ to, name, title, message, link }) {
   const fs = await import('fs/promises')
   const path = await import('path')
@@ -459,8 +464,12 @@ export async function sendAnnouncementEmail({ to, name, title, message, link }) 
   const safeMessage = escapeHtml(message).replace(/\n/g, '<br>')
   const currentYear = new Date().getFullYear()
   
-  // Replace template placeholders
+  // Replace template placeholders. ASSET_BASE/SITE_LABEL keep the template's
+  // images and footer link tied to FRONTEND_URL instead of a hardcoded host.
+  const base = getFrontendUrl()
   let htmlContent = htmlTemplate
+    .replace(/{{ASSET_BASE}}/g, base)
+    .replace(/{{SITE_LABEL}}/g, brandWebsiteLabel(base))
     .replace(/{{TITLE}}/g, safeTitle)
     .replace(/{{MESSAGE}}/g, safeMessage)
     .replace(/{{YEAR}}/g, currentYear.toString())
@@ -492,12 +501,12 @@ function sendAnnouncementEmailSimple({ to, name, title, message, link }) {
   return sendEmail({ to, toName: name, subject, htmlContent })
 }
 
-// 7b. Custom Team Email — fully customizable subject/title/message with the SKH
+// 7b. Custom Team Email — fully customizable subject/title/message with the
 // branded wrapper. Used to email qualified teams (leader + members) a message
 // the admin composes from the Results page. Optional CTA link.
 export async function sendCustomEmail({ to, name, subject, title, message, link }) {
   const safeName = escapeHtml(name || 'Participant')
-  const safeTitle = escapeHtml(title || 'Smart Kopargaon Hackathon')
+  const safeTitle = escapeHtml(title || BRAND.name)
   const safeMessage = escapeHtml(message || '').replace(/\n/g, '<br>')
   const linkUrl = String(link || '').trim()
   const linkSafe = /^https?:\/\//i.test(linkUrl) ? escapeHtml(linkUrl) : ''
@@ -507,10 +516,10 @@ export async function sendCustomEmail({ to, name, subject, title, message, link 
       <p style="margin:0;color:#334155;line-height:1.6;">${safeMessage}</p>
     </div>
     ${linkSafe ? ctaButton('Open Link', linkSafe) : ''}
-    <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Warm regards,<br/>Team Smart Kopargaon Hackathon</p>
+    <p style="margin:20px 0 0;color:#64748b;font-size:14px;">Warm regards,<br/>Team ${BRAND.name}</p>
   `
   const htmlContent = renderBrandedEmail({ title: safeTitle, bodyHtml })
-  const finalSubject = String(subject || title || 'Smart Kopargaon Hackathon').slice(0, 200)
+  const finalSubject = String(subject || title || BRAND.name).slice(0, 200)
   return sendEmail({ to, toName: safeName, subject: escapeHtml(finalSubject), htmlContent })
 }
 
@@ -534,7 +543,7 @@ export async function sendEvaluationCompleteEmail({ to, name, teamName }) {
 export async function sendQualifiedEmail({ to, name, teamName, eventName }) {
   const safeName = escapeHtml(name || 'Team Leader')
   const safeTeam = escapeHtml(teamName || 'Your Team')
-  const safeEvent = escapeHtml(eventName || 'Smart Kopargaon Hackathon')
+  const safeEvent = escapeHtml(eventName || BRAND.name)
   const subject = `Congratulations! ${safeTeam} has qualified for the Grand Finale — ${safeEvent}`
   const bodyHtml = `
     <p style="margin:0 0 14px;"><strong>Dear ${safeName},</strong></p>
@@ -616,15 +625,16 @@ export async function sendCredentialsEmail({ to, name, tempPassword, eventName, 
   const safeName = escapeHtml(name || copy.defaultName)
   const safeEmail = escapeHtml(to)
   const safePassword = escapeHtml(String(tempPassword))
-  const safeEventName = escapeHtml(eventName || 'Smart Kopargaon Hackathon')
+  const safeEventName = escapeHtml(eventName || BRAND.name)
   const loginUrl = `${getFrontendUrl()}/auth`
   const subject = `Your ${safeEventName} login credentials`
 
   // Attach the "How to Register" PDF guide only on the team-leader credentials
   // email (judges/mentors don't register teams).
-  const pdfPath = join(TEMPLATES_DIR, 'How-To-Register-SKH.pdf')
+  const pdfName = 'How-To-Register.pdf'
+  const pdfPath = join(TEMPLATES_DIR, pdfName)
   const attachments = (copy.attachPdf && existsSync(pdfPath))
-    ? [{ filename: 'How-To-Register-SKH.pdf', path: pdfPath }]
+    ? [{ filename: pdfName, path: pdfPath }]
     : []
 
   // Try the branded template file first
@@ -634,6 +644,7 @@ export async function sendCredentialsEmail({ to, name, tempPassword, eventName, 
     const tpl = await fs.readFile(templatePath, 'utf-8')
     const htmlContent = tpl
       .replace(/{{ASSET_BASE}}/g, getFrontendUrl())
+      .replace(/{{SITE_LABEL}}/g, brandWebsiteLabel(getFrontendUrl()))
       .replace(/{{EVENT_NAME}}/g, safeEventName)
       .replace(/{{NAME}}/g, safeName)
       .replace(/{{EMAIL}}/g, safeEmail)
@@ -668,8 +679,9 @@ export async function sendCredentialsEmail({ to, name, tempPassword, eventName, 
 export async function sendOtpEmail({ to, name, otp, eventName }) {
   const safeName = escapeHtml(name || 'there')
   const safeOtp = escapeHtml(String(otp))
-  const safeEventName = escapeHtml(eventName || 'Smart Kopargaon Hackathon')
-  const gifUrl = `${getFrontendUrl()}/skh.gif`
+  const safeEventName = escapeHtml(eventName || BRAND.name)
+  const base = getFrontendUrl()
+  const logoUrl = brandAssets(base).logo
   const year = new Date().getFullYear()
   const subject = `Your verification code: ${safeOtp}`
   const htmlContent = `
@@ -684,10 +696,11 @@ export async function sendOtpEmail({ to, name, otp, eventName }) {
         <tr>
           <td align="center" style="padding:24px 12px;">
             <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px;max-width:600px;background-color:#ffffff;border-radius:12px;overflow:hidden;">
-              <!-- Header with SKH gif -->
+              <!-- Header: brand mark + wordmark -->
               <tr>
                 <td align="center" style="background-color:#e6f4ff;padding:36px 20px 8px;">
-                  <img src="${gifUrl}" alt="SKH" width="260" style="display:block;border:0;width:100%;max-width:260px;height:auto;margin:0 auto;">
+                  <img src="${logoUrl}" alt="${BRAND.name}" width="181" style="display:block;border:0;width:181px;max-width:100%;height:auto;margin:0 auto 10px;">
+                  <p style="margin:0;color:#185983;font-family:'Space Grotesk','Inter',Arial,sans-serif;font-size:18px;font-weight:700;">${BRAND.name}</p>
                 </td>
               </tr>
               <tr>
@@ -717,7 +730,7 @@ export async function sendOtpEmail({ to, name, otp, eventName }) {
               <!-- Footer -->
               <tr>
                 <td align="center" style="background-color:#185983;padding:22px 20px;">
-                  <a href="${getFrontendUrl()}" style="color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;">skh.sanjivaniuniversity.com</a>
+                  <a href="${base}" style="color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;">${brandWebsiteLabel(base)}</a>
                   <p style="margin:6px 0 0;font-size:12px;color:#a9d4ec;">${safeEventName} &middot; ${year}</p>
                 </td>
               </tr>
@@ -735,7 +748,7 @@ export async function sendOtpEmail({ to, name, otp, eventName }) {
 // so it lands in the inbox instead of Firebase's spam-prone default sender.
 export async function sendPasswordResetLinkEmail({ to, name, resetLink, eventName }) {
   const safeName = escapeHtml(name || 'there')
-  const safeEventName = escapeHtml(eventName || 'Smart Kopargaon Hackathon')
+  const safeEventName = escapeHtml(eventName || BRAND.name)
   const safeLink = String(resetLink || '')
   const subject = `Reset your ${safeEventName} password`
   const bodyHtml = `

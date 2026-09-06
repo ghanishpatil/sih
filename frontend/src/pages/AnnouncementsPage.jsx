@@ -19,7 +19,7 @@ export function AnnouncementsPage() {
       {/* ═══════ HERO BANNER ═══════ */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0">
-          <img src="/skh-banner.png" alt="Smart Kopargaon Hackathon 2026" className="h-full w-full object-cover" draggable={false} />
+          <img src="/skh-banner.png" alt="Internal Smart India Hackathon 2026" className="h-full w-full object-cover" draggable={false} />
           <div className="absolute inset-0 bg-gradient-to-r from-ink-950/85 via-ink-950/65 to-ink-950/85" />
           <div className="absolute inset-0 bg-gradient-to-t from-ink-950/95 via-transparent to-ink-950/40" />
         </div>
@@ -33,7 +33,7 @@ export function AnnouncementsPage() {
               Announcements
             </h1>
             <p className="mt-3 max-w-2xl text-base text-white/75 sm:text-lg">
-              Real-time updates from the {APP.shortName || 'SKH'} organizing committee.
+              Real-time updates from the {APP.shortName} organizing committee.
               Critical notices, schedule changes, and event highlights.
             </p>
           </motion.div>

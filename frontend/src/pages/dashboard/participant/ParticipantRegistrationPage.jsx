@@ -12,6 +12,7 @@ import {
   FileCheck,
 } from 'lucide-react'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
+import { APP } from '@/utils/constants.js'
 import { useParticipantWorkspace } from '@/hooks/useParticipantWorkspace.js'
 import { useAuth } from '@/context/AuthContext.jsx'
 import { Card } from '@/components/ui/Card.jsx'
@@ -147,7 +148,7 @@ export function ParticipantRegistrationPage() {
       return new Promise((resolve, reject) => {
         const options = {
           key: keyId,
-          name: 'Smart Kopargaon Hackathon',
+          name: APP.name,
           description: 'Registration fee',
           order_id: order.orderId,
           handler: (response) => {

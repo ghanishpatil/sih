@@ -4,23 +4,14 @@ import { Menu, X, ChevronRight } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAuth } from '@/context/AuthContext.jsx'
 import { Button } from '@/components/ui/Button.jsx'
+import { BrandLogo } from '@/components/ui/BrandLogo.jsx'
 import { APP } from '@/utils/constants.js'
 import { roleHome, ROLES } from '@/utils/roles.js'
 
 const links = [
-  { to: '/', label: 'Home' },
-  { to: '/about', label: 'About & SDGs' },
   { to: '/problems', label: 'Problem Statements' },
   { to: '/announcements', label: 'Announcements' },
   { to: '/results', label: 'Results' },
-  { to: '/grand-finale', label: 'Grand Finale' },
-]
-
-const resourceLinks = [
-  { to: '/how-to-register', label: 'How to Register' },
-  { to: '/sponsors', label: 'Partners & Sponsors' },
-  { to: '/guidelines', label: 'Submission Guidelines' },
-  { to: '/code-of-conduct', label: 'Code of Conduct' },
 ]
 
 export function Navbar() {
@@ -87,9 +78,9 @@ export function Navbar() {
         <Link to="/" className="group flex shrink-0 items-center gap-1.5 sm:gap-2 md:gap-3">
           {/* Sanjivani University Logo — brutalist tile */}
           <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-2 border-ink-900 bg-white shadow-[2px_2px_0_0_rgb(15_23_42)] transition-all duration-200 group-hover:translate-x-[1px] group-hover:translate-y-[1px] group-hover:shadow-[1px_1px_0_0_rgb(15_23_42)] sm:h-10 sm:w-10 md:h-12 md:w-12">
-            <img 
-              src="/sanjivani-logo.png" 
-              alt="Sanjivani University" 
+            <img
+              src={APP.universityLogo}
+              alt={APP.university}
               className="h-[85%] w-[85%] object-contain"
               onError={(e) => {
                 e.target.style.display = 'none'
@@ -98,23 +89,16 @@ export function Navbar() {
             />
           </div>
           
-          {/* SKH Logo — brutalist tile */}
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border-2 border-ink-900 bg-white shadow-[2px_2px_0_0_rgb(15_23_42)] transition-all duration-200 group-hover:translate-x-[1px] group-hover:translate-y-[1px] group-hover:shadow-[1px_1px_0_0_rgb(15_23_42)] sm:h-10 sm:w-10 md:h-11 md:w-11">
-            <img 
-              src="/logo.png" 
-              alt={APP.shortName} 
-              className="h-[85%] w-[85%] object-contain" 
-            />
+          {/* Event wordmark — brutalist tile, width follows the logo */}
+          <div className="flex h-9 shrink-0 items-center justify-center rounded-md border-2 border-ink-900 bg-white px-1.5 shadow-[2px_2px_0_0_rgb(15_23_42)] transition-all duration-200 group-hover:translate-x-[1px] group-hover:translate-y-[1px] group-hover:shadow-[1px_1px_0_0_rgb(15_23_42)] sm:h-10 sm:px-2 md:h-11">
+            <BrandLogo className="h-[74%]" />
           </div>
-          
+
           {/* Text - Always visible */}
           <span className="flex flex-col leading-tight">
             <span className="font-display text-[10px] font-bold text-ink-900 xs:text-xs sm:text-sm md:text-base">
-              <span className="hidden md:inline">Smart Kopargaon Hackathon</span>
-              <span className="md:hidden">SKH</span>
-            </span>
-            <span className="text-[8px] font-medium text-ink-500 xs:text-[9px] sm:text-[10px]">
-              Powered by Sanjivani University
+              <span className="hidden md:inline">{APP.name}</span>
+              <span className="md:hidden">{APP.shortName}</span>
             </span>
           </span>
         </Link>
@@ -216,34 +200,6 @@ export function Navbar() {
                   initial={{ opacity: 0, x: -12 }}
                   animate={{ opacity: 1, x: 0 }}
                   transition={{ delay: i * 0.04 }}
-                >
-                  <NavLink
-                    to={to}
-                    onClick={() => setOpen(false)}
-                    className={({ isActive }) =>
-                      [
-                        'flex min-h-[44px] items-center rounded-xl px-3 py-2.5 text-sm font-medium transition-colors active:scale-[0.98] sm:px-4 sm:py-3',
-                        isActive
-                          ? 'bg-brand-500/10 text-brand-600'
-                          : 'text-ink-700 hover:bg-[rgb(var(--surface-muted))]',
-                      ].join(' ')
-                    }
-                  >
-                    {label}
-                  </NavLink>
-                </motion.div>
-              ))}
-
-              {/* Resources Links */}
-              <div className="mb-1 mt-3 px-3 text-[10px] font-semibold uppercase tracking-wider text-ink-500 sm:mb-2 sm:mt-4 sm:px-4 sm:text-xs">
-                Resources
-              </div>
-              {resourceLinks.map(({ to, label }, i) => (
-                <motion.div
-                  key={to}
-                  initial={{ opacity: 0, x: -12 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: (links.length + i) * 0.04 }}
                 >
                   <NavLink
                     to={to}

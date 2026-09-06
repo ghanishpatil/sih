@@ -1,5 +1,5 @@
 /**
- * SKH Security Center — Phase 2: Skeleton + Overview + Live Activity
+ * Internal SIH Security Center — Phase 2: Skeleton + Overview + Live Activity
  * Enterprise-grade security operations module.
  * All data is real — sourced from Firestore via Admin SDK.
  */

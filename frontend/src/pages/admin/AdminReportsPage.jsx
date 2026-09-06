@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/Skeleton.jsx'
 import { Badge } from '@/components/ui/Badge.jsx'
 import { downloadCsv } from '@/utils/csvExport.js'
 import { cn } from '@/utils/cn.js'
+import { APP } from '@/utils/constants.js'
 
 const COLORS = {
   brand: '#3b82f6',
@@ -436,7 +437,7 @@ export function AdminReportsPage() {
       </section>`
 
     const docHtml = `<!doctype html><html><head><meta charset="utf-8" />
-      <title>SKH Analytics Report</title>
+      <title>Internal SIH Analytics Report</title>
       ${head}
       <style>
         *{ -webkit-print-color-adjust:exact !important; print-color-adjust:exact !important; box-shadow:none !important; }
@@ -467,15 +468,15 @@ export function AdminReportsPage() {
     </head><body>
       <div class="pdf-wrap">
         <div class="pdf-header">
-          <img src="${origin}/logo.png" alt="SKH" />
+          <img src="${origin}/sih-logo.png" alt="${APP.shortName}" />
           <div>
-            <p class="pdf-h1">Smart Kopargaon Hackathon — Analytics Report</p>
+            <p class="pdf-h1">${APP.name} — Analytics Report</p>
             <p class="pdf-sub">Generated ${generated}</p>
           </div>
         </div>
         ${node.outerHTML}
         ${summaryHtml}
-        <p class="pdf-foot">Confidential — generated from the SKH admin dashboard.</p>
+        <p class="pdf-foot">Confidential — generated from the ${APP.shortName} admin dashboard.</p>
       </div>
     </body></html>`
 

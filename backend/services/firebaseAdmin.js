@@ -9,7 +9,7 @@ export function initFirebaseAdmin() {
   if (initialized) return true
   const json = process.env.FIREBASE_SERVICE_ACCOUNT_JSON
   if (!json) {
-    console.warn('[skh-backend] FIREBASE_SERVICE_ACCOUNT_JSON not set — API auth disabled.')
+    console.warn('[sih-backend] FIREBASE_SERVICE_ACCOUNT_JSON not set — API auth disabled.')
     return false
   }
   try {
@@ -23,7 +23,7 @@ export function initFirebaseAdmin() {
     initialized = true
     return true
   } catch (e) {
-    console.error('[skh-backend] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON', e.message)
+    console.error('[sih-backend] Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON', e.message)
     return false
   }
 }

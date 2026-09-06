@@ -16,6 +16,7 @@ import { motion } from 'framer-motion'
 import { CheckCircle2, XCircle, Loader2, Lock } from 'lucide-react'
 import { auth } from '@/firebase/client.js'
 import { Button } from '@/components/ui/Button.jsx'
+import { BrandLogo } from '@/components/ui/BrandLogo.jsx'
 import { Input } from '@/components/ui/Input.jsx'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
 import { APP } from '@/utils/constants.js'
@@ -113,7 +114,7 @@ export function AuthActionPage() {
       >
         {/* Logo */}
         <div className="mb-6 flex items-center gap-3">
-          <img src="/logo.png" alt={APP.shortName} className="h-10 w-10 rounded-xl object-contain" />
+          <BrandLogo className="h-9 shrink-0" />
           <div>
             <p className="font-display text-sm font-bold text-ink-900">{APP.shortName}</p>
             <p className="text-[10px] text-ink-500">{APP.university}</p>

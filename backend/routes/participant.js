@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { FieldValue } from 'firebase-admin/firestore'
 import { randomInt } from 'crypto'
 import { getDb } from '../services/firebaseAdmin.js'
+import { BRAND } from '../services/brand.js'
 import { verifyFirebaseToken, loadUserRole, requireRole } from '../middleware/auth.js'
 import { attachEventContext } from '../middleware/eventContext.js'
 import { teamMaySelectProblem } from '../services/eventConfig.js'
@@ -98,7 +99,7 @@ r.post('/password/request-otp', async (req, res, next) => {
         to: email,
         name: req.profile?.displayName || 'there',
         otp: issued.otp,
-        eventName: activeEvent?.name || 'Smart Kopargaon Hackathon',
+        eventName: activeEvent?.name || BRAND.name,
       })
     } catch (e) {
       console.error('[password otp email] send threw:', e.message)
@@ -468,7 +469,7 @@ r.post('/register-team-event', async (req, res, next) => {
 
     // Only notify registration complete if no fee is required (immediate registration)
     if (!feeRequired) {
-      notifyRegistrationComplete({ teamId, eventName: 'Smart Kopargaon Hackathon' }).catch(() => {})
+      notifyRegistrationComplete({ teamId, eventName: BRAND.name }).catch(() => {})
     }
 
     logActivity({ ...actorFromReq(req), activityType: ACTIVITY_TYPE.TEAM_REGISTERED, teamId, targetId: teamId, targetType: 'team', description: feeRequired ? `Registered team (payment ${patch.paymentChoice === 'later' ? 'deferred' : 'pending'})` : 'Registered team (no fee)', metadata: { feeRequired, paymentChoice: patch.paymentChoice || null } }).catch(() => {})
@@ -589,7 +590,7 @@ r.post('/verify-razorpay-payment', async (req, res, next) => {
     // request actually wrote the payment (result.didWrite). This prevents a
     // duplicate welcome email when the user double-submits the payment form.
     if (result.didWrite) {
-      notifyRegistrationComplete({ teamId, eventName: 'Smart Kopargaon Hackathon' }).catch(() => {})
+      notifyRegistrationComplete({ teamId, eventName: BRAND.name }).catch(() => {})
     }
 
     logActivity({ ...actorFromReq(req), activityType: ACTIVITY_TYPE.PAYMENT_VERIFIED, teamId, targetId: teamId, targetType: 'team', description: 'Payment verified — team fully registered', metadata: { razorpay_order_id, razorpay_payment_id } }).catch(() => {})

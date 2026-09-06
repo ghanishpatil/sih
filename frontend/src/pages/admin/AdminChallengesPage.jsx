@@ -12,18 +12,18 @@ import { Badge } from '@/components/ui/Badge.jsx'
 import { Skeleton } from '@/components/ui/Skeleton.jsx'
 import { parseCSV, downloadCSV } from '@/utils/csvParser.js'
 
-// The 5 official Smart Kopargaon "Universal Scenario Challenges" — domain-agnostic,
+// The 5 official "Universal Scenario Challenges" — domain-agnostic,
 // identical for every team and both hardware/software tracks. Each has three parts:
 // the scenario (description), "Why it's universal", and "What the website/demo must
 // show". Used to pre-fill the downloadable CSV template.
-const SKH_UNIVERSAL_CHALLENGES = [
+const UNIVERSAL_CHALLENGES = [
   {
     order: 1,
     title: 'The Blackout',
     description:
-      "It's 9 PM in Kopargaon. The power goes out across half the taluka, and mobile data drops to nothing for the next two hours. Your solution is in active use — a farmer mid-advisory, a health worker mid-screening, a municipal officer mid-report. Show us what the user sees on your website/app right now.",
+      "It's 9 PM in a rural taluka. The power goes out across half the district, and mobile data drops to nothing for the next two hours. Your solution is in active use — a farmer mid-advisory, a health worker mid-screening, a municipal officer mid-report. Show us what the user sees on your website/app right now.",
     whyUniversal:
-      "Every track's problem statement assumes some form of connectivity or power — a sensor sending data, a dashboard loading, a citizen submitting a report — and Kopargaon's rural infrastructure regularly fails at exactly that assumption. Hardware teams can demonstrate by killing power/network to their device; software teams by toggling offline mode in the browser.",
+      "Every track's problem statement assumes some form of connectivity or power — a sensor sending data, a dashboard loading, a citizen submitting a report — and rural infrastructure regularly fails at exactly that assumption. Hardware teams can demonstrate by killing power/network to their device; software teams by toggling offline mode in the browser.",
     whatToShow:
       "The interface doesn't go blank or error out — it degrades gracefully: cached last-known data, a clear 'offline, last updated at X' state, and locally queued actions that sync once connectivity returns. A team that can only demo with a live internet connection fails this challenge outright.",
   },
@@ -41,9 +41,9 @@ const SKH_UNIVERSAL_CHALLENGES = [
     order: 3,
     title: 'The Surge',
     description:
-      "Word got out. Your solution just got featured on local news, or a heavy-rain warning hit every farmer's phone at once, or a festival brought ten times Kopargaon's usual foot traffic through your system in the same hour. Built and tested for a handful of users, it now has far more load than it was designed for. Show us what happens when it's suddenly popular.",
+      "Word got out. Your solution just got featured on local news, or a heavy-rain warning hit every farmer's phone at once, or a festival brought ten times the usual foot traffic through your system in the same hour. Built and tested for a handful of users, it now has far more load than it was designed for. Show us what happens when it's suddenly popular.",
     whyUniversal:
-      "Every track's real deployment target is a population, not a demo audience — thousands of farmers, an entire taluka's citizens, every MSME in a cluster. A system that only works at hackathon-demo scale isn't actually solving the problem for Kopargaon.",
+      "Every track's real deployment target is a population, not a demo audience — thousands of farmers, an entire taluka's citizens, every MSME in a cluster. A system that only works at hackathon-demo scale isn't actually solving the problem.",
     whatToShow:
       "Some evidence of how the system behaves under load it wasn't fully built for — an actual load test, a simulated queue/throttling mechanism, a 'high demand, here's your position' state, or an honest explanation of what would break first and how you'd fix it. Production-grade scaling in 24 hours isn't expected — evidence of having thought about it is.",
   },
@@ -53,7 +53,7 @@ const SKH_UNIVERSAL_CHALLENGES = [
     description:
       "Someone just tried to break your system. A stranger is typing suspicious input into your login form. A fake sensor is feeding spoofed readings into your pipeline to trigger a false alert. Someone found your API and is hammering it, or a device on your network is trying to intercept the data between your sensor and your dashboard. Nothing has broken yet — but someone is actively trying. Show us what stops them.",
     whyUniversal:
-      "Every track eventually touches something worth protecting — a farmer's personal data, a citizen's grievance record, a health screening result, an MSME's credit application, a municipal system of record, or a sensor feed a bad actor could spoof to trigger false alerts or hide a real one. A system that works for a well-behaved user but has no answer for a bad-faith one isn't ready for Kopargaon, however polished.",
+      "Every track eventually touches something worth protecting — a farmer's personal data, a citizen's grievance record, a health screening result, an MSME's credit application, a municipal system of record, or a sensor feed a bad actor could spoof to trigger false alerts or hide a real one. A system that works for a well-behaved user but has no answer for a bad-faith one isn't ready for deployment, however polished.",
     whatToShow:
       "At least one concrete security decision the team actually made and can demonstrate — not a claim that 'it's secure'. For example: input validation/sanitisation that rejects malicious input live on screen, authentication or role-based access control a stranger can't bypass, rate-limiting on an API/form, encrypted or signed data between a sensor and its dashboard so a spoofed reading is detectable, or tamper-evidence on a physical device. Hardware teams point to a safeguard on the device or its link; software teams attempt the attack live and show it rejected or logged.",
   },
@@ -75,7 +75,7 @@ function toCsvCell(v) {
 
 const CHALLENGE_TEMPLATE_CSV = [
   'title,description,why_universal,what_to_show,order',
-  ...SKH_UNIVERSAL_CHALLENGES.map(
+  ...UNIVERSAL_CHALLENGES.map(
     (c) => `${toCsvCell(c.title)},${toCsvCell(c.description)},${toCsvCell(c.whyUniversal)},${toCsvCell(c.whatToShow)},${c.order}`,
   ),
 ].join('\n')
@@ -494,7 +494,7 @@ export function AdminChallengesPage() {
           Columns: <code className="font-mono">title</code> (required), <code className="font-mono">description</code>,{' '}
           <code className="font-mono">why_universal</code>, <code className="font-mono">what_to_show</code>,{' '}
           <code className="font-mono">order</code> (optional). The downloadable template is pre-filled with the 5 official
-          SKH universal challenges — edit or replace them, then upload. Drop order follows the{' '}
+          universal challenges — edit or replace them, then upload. Drop order follows the{' '}
           <code className="font-mono">order</code> column, else the row order.
         </p>
         <div className="flex flex-wrap gap-2">

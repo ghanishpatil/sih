@@ -6,6 +6,7 @@ import { useAuth } from '@/context/AuthContext.jsx'
 import { publicApi } from '@/services/api.js'
 import { Input } from '@/components/ui/Input.jsx'
 import { Button } from '@/components/ui/Button.jsx'
+import { BrandLogo } from '@/components/ui/BrandLogo.jsx'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
 import { roleHome } from '@/utils/roles.js'
 import { APP, REGISTRATION_URL } from '@/utils/constants.js'
@@ -105,9 +106,9 @@ export function AuthPage() {
               initial={{ scale: 0.8, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               transition={{ delay: 0.2, duration: 0.5 }}
-              className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-xl bg-white shadow-lg shadow-brand-500/20 ring-1 ring-brand-500/10"
+              className="inline-flex h-14 items-center justify-center rounded-xl bg-white px-3 shadow-lg shadow-brand-500/20 ring-1 ring-brand-500/10"
             >
-              <img src="/logo.png" alt={APP.name} className="h-11 w-11 object-contain" />
+              <BrandLogo className="h-9" />
             </motion.div>
             <motion.h2
               initial={{ opacity: 0, y: 12 }}
@@ -127,23 +128,8 @@ export function AuthPage() {
             </motion.p>
           </div>
 
-          {/* Floating mascot — fills the middle so the panel stays balanced */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.85 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: 0.45, duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-            className="relative flex flex-1 items-center justify-center py-6"
-          >
-            <div className="pointer-events-none absolute h-44 w-44 rounded-full bg-brand-400/25 blur-3xl" aria-hidden />
-            <motion.img
-              src="/skh3d.png"
-              alt=""
-              draggable={false}
-              className="relative h-40 w-40 object-contain drop-shadow-2xl xl:h-48 xl:w-48"
-              animate={{ y: [0, -12, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-            />
-          </motion.div>
+          {/* Spacer keeps the intro and feature list balanced in the panel */}
+          <div className="flex-1" aria-hidden />
 
           <motion.div
             initial="hidden"

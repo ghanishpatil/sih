@@ -1,11 +1,33 @@
+// ── Brand / identity (single source of truth) ────────────────────────────────
+// Consumed by usePageSeo, Navbar, Footer, every public page and the admin
+// surfaces. Change it here and it cascades everywhere.
 export const APP = {
-  name: 'Smart Kopargaon Hackathon',
-  shortName: 'SKH',
+  name: 'Internal Smart India Hackathon',
+  shortName: 'Internal SIH',
   university: 'Sanjivani University',
-  region: 'Kopargaon Taluka',
-  contactEmail: 'skh@sanjivani.edu.in',
+  // Used in copy like "a platform for {region}". This is a university-internal
+  // qualifier, so the scope is the university itself.
+  region: 'Sanjivani University',
+  parentEvent: 'Smart India Hackathon',
+  tagline: 'Sanjivani University’s internal qualifier for the Smart India Hackathon',
+  contactEmail: 'sih@sanjivani.edu.in',
   contactPhone: '+91 74983 11334',
   venue: 'Sanjivani University Innovation Campus',
+  // Brand mark (SIH wordmark). Lives at `frontend/public/sih-logo.png`; every
+  // surface reads it from here via the BrandLogo component.
+  logo: '/sih-logo.png',
+  // Host institution mark, shown alongside the event logo in the navbar.
+  universityLogo: '/sanjivani-logo.png',
+}
+
+// Official social/community accounts. These are live external handles — update
+// them here if the accounts themselves are ever renamed.
+export const SOCIAL_LINKS = {
+  instagram: 'https://www.instagram.com/skhackathon.su?igsh=ZjByZnRlc2t1ZTg3',
+  twitter: 'https://x.com/skhackathon',
+  linkedin: 'https://www.linkedin.com/company/smart-kopargaon-hackathon/',
+  github: 'https://github.com/smartkopargaonhackathon-su',
+  whatsapp: 'https://whatsapp.com/channel/0029VbBnF0wGk1FvfjRRqh3G',
 }
 
 // Student coordinators & team leaders — shown in the footer and Contact page.
@@ -108,7 +130,7 @@ export const FAQ_ITEMS = [
   },
   {
     q: 'How are submissions evaluated?',
-    a: 'A jury panel scores innovation, feasibility, impact for Kopargaon Taluka, and demo quality using a structured rubric, with each criterion scored independently.',
+    a: 'A jury panel scores innovation, feasibility, real-world impact, and demo quality using a structured rubric, with each criterion scored independently. Top teams are shortlisted to represent Sanjivani University at the national Smart India Hackathon.',
   },
 ]
 

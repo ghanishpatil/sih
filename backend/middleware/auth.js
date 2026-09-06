@@ -1,6 +1,7 @@
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from '../services/firebaseAdmin.js'
+import { BRAND } from '../services/brand.js'
 import { getActiveEvent } from '../services/eventsService.js'
 
 /**
@@ -98,7 +99,7 @@ export async function loadUserRole(req, res, next) {
           sendAccountCreatedEmail({
             to: req.user.email,
             name: req.user.name || 'Participant',
-            eventName: activeEvent?.name || 'Smart Kopargaon Hackathon',
+            eventName: activeEvent?.name || BRAND.name,
           }).catch((e) => console.error('[Auth] Account created email failed:', e.message))
         }).catch(() => {})
       }

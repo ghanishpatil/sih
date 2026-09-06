@@ -15,6 +15,7 @@ import { useAuth } from '@/context/AuthContext.jsx'
 import { useEvent } from '@/context/EventContext.jsx'
 import { ROLES, roleHome } from '@/utils/roles.js'
 import { Button } from '@/components/ui/Button.jsx'
+import { BrandLogo } from '@/components/ui/BrandLogo.jsx'
 import { APP } from '@/utils/constants.js'
 import { AdminScopeBanner } from '@/components/admin/AdminScopeBanner.jsx'
 import { CommandPalette } from '@/components/admin/CommandPalette.jsx'
@@ -249,7 +250,12 @@ export function DashboardLayout({ variant = 'default' }) {
       {/* Logo area */}
       <div className={`shrink-0 flex h-16 items-center justify-between gap-2 border-b border-[rgb(var(--border))]/50 px-4 lg:h-auto lg:border-b-0 lg:px-4 lg:pb-0 lg:pt-7 ${isParticipantShell && collapsed ? 'lg:px-2' : ''}`}>
         <div className={`flex items-center gap-2.5 ${isParticipantShell && collapsed ? 'lg:justify-center lg:w-full' : ''}`}>
-          <img src="/logo.png" alt={APP.shortName} className="h-11 w-11 shrink-0 rounded-xl object-contain shadow-md shadow-brand-500/20 ring-1 ring-brand-500/10" />
+          {/* Wide wordmark: shrink it in the collapsed rail so it never overflows. */}
+          <BrandLogo
+            className={`shrink-0 rounded-lg bg-white p-1 shadow-md shadow-brand-500/20 ring-1 ring-brand-500/10 ${
+              isParticipantShell && collapsed ? 'h-8' : 'h-11'
+            }`}
+          />
           {!(isParticipantShell && collapsed) ? (
             <div className="min-w-0 leading-tight">
               <p className="font-display text-sm font-bold text-ink-900">{APP.shortName}</p>

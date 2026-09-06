@@ -80,7 +80,7 @@ function exportChat(messages) {
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
   a.href = url
-  a.download = `skh-admin-chat-${new Date().toISOString().slice(0, 10)}.txt`
+  a.download = `sih-admin-chat-${new Date().toISOString().slice(0, 10)}.txt`
   a.click()
   URL.revokeObjectURL(url)
 }
@@ -91,7 +91,7 @@ export function AdminChatbot() {
   const [sizeKey, setSizeKey] = useState('md')
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState([
-    { role: 'model', text: "Hi! I'm your SKH Admin Assistant powered by Gemini. Ask me anything about managing the platform — mentor assignments, problem statements, jury setup, payments, or anything else." },
+    { role: 'model', text: "Hi! I'm your Internal SIH Admin Assistant powered by Gemini. Ask me anything about managing the platform — mentor assignments, problem statements, jury setup, payments, or anything else." },
   ])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -195,7 +195,7 @@ export function AdminChatbot() {
                 <Bot className="h-4 w-4 text-white" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white">SKH Admin Assistant</p>
+                <p className="text-sm font-semibold text-white">Internal SIH Admin Assistant</p>
                 <p className="text-[10px] text-white/70">Gemini 2.5 Flash · {messages.length - 1} message{messages.length !== 2 ? 's' : ''}</p>
               </div>
 

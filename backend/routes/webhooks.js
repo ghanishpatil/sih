@@ -1,5 +1,6 @@
 import { verifyWebhookSignature } from '../services/razorpay.js'
 import { getDb } from '../services/firebaseAdmin.js'
+import { BRAND } from '../services/brand.js'
 import { markTeamPaidFromWebhook } from '../services/teamPaymentRazorpay.js'
 import { notifyRegistrationComplete } from '../services/notificationService.js'
 import { logSecurityEvent, EVENT_TYPE, SEVERITY, extractIp } from '../services/securityLog.js'
@@ -88,7 +89,7 @@ export async function razorpayWebhookHandler(req, res) {
 
     // Send welcome email on new payment (not on duplicate webhook retries)
     if (result.didWrite) {
-      notifyRegistrationComplete({ teamId: result.teamId, eventName: 'Smart Kopargaon Hackathon' }).catch(() => {})
+      notifyRegistrationComplete({ teamId: result.teamId, eventName: BRAND.name }).catch(() => {})
     }
 
     await logWebhookEvent(db, { event, status: 'success', orderId, paymentId, teamId: result.teamId, ip })

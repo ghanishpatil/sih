@@ -1,29 +1,25 @@
 import { Link } from 'react-router-dom'
 import { Mail, MapPin, Phone, Github, Twitter, Linkedin, Instagram, ExternalLink, MessageCircle } from 'lucide-react'
-import { APP, COORDINATORS } from '@/utils/constants.js'
+import { BrandLogo } from '@/components/ui/BrandLogo.jsx'
+import { APP, COORDINATORS, SOCIAL_LINKS } from '@/utils/constants.js'
 
 const footerLinks = {
   platform: [
-    { to: '/about', label: 'About SKH' },
-    { to: '/problems', label: 'Problem Bank' },
+    { to: '/problems', label: 'Problem Statements' },
     { to: '/announcements', label: 'Announcements' },
-    { to: '/faq', label: 'FAQ' },
+    { to: '/results', label: 'Results' },
   ],
   resources: [
-    { to: '/sponsors', label: 'Partners & Sponsors' },
-    { to: '/auth', label: 'Participant Login' },
-    { to: '/contact', label: 'Contact Us' },
-    { to: '/guidelines', label: 'Submission Guidelines' },
-    { to: '/code-of-conduct', label: 'Code of Conduct' },
+    { to: '/', label: 'Participant Login' },
   ],
 }
 
 const socials = [
-  { icon: Instagram, href: 'https://www.instagram.com/skhackathon.su?igsh=ZjByZnRlc2t1ZTg3', label: 'Instagram' },
-  { icon: Twitter, href: 'https://x.com/skhackathon', label: 'Twitter' },
-  { icon: Linkedin, href: 'https://www.linkedin.com/company/smart-kopargaon-hackathon/', label: 'LinkedIn' },
-  { icon: Github, href: 'https://github.com/smartkopargaonhackathon-su', label: 'GitHub' },
-  { icon: MessageCircle, href: 'https://whatsapp.com/channel/0029VbBnF0wGk1FvfjRRqh3G', label: 'WhatsApp Community' },
+  { icon: Instagram, href: SOCIAL_LINKS.instagram, label: 'Instagram' },
+  { icon: Twitter, href: SOCIAL_LINKS.twitter, label: 'Twitter' },
+  { icon: Linkedin, href: SOCIAL_LINKS.linkedin, label: 'LinkedIn' },
+  { icon: Github, href: SOCIAL_LINKS.github, label: 'GitHub' },
+  { icon: MessageCircle, href: SOCIAL_LINKS.whatsapp, label: 'WhatsApp Community' },
 ]
 
 export function Footer() {
@@ -44,15 +40,15 @@ export function Footer() {
           {/* Brand column */}
           <div className="lg:col-span-4">
             <div className="flex items-center gap-2.5">
-              <img src="/logo.png" alt={APP.shortName} className="h-12 w-12 rounded-xl object-contain shadow-md shadow-brand-500/20 ring-1 ring-brand-500/10" />
+              <BrandLogo className="h-12 shrink-0 rounded-lg bg-white p-1.5 shadow-md shadow-brand-500/20 ring-1 ring-brand-500/10" />
               <div>
                 <p className="font-display text-lg font-bold text-white">{APP.name}</p>
                 <p className="text-xs font-medium text-ink-400">{APP.university}</p>
               </div>
             </div>
             <p className="mt-5 max-w-sm text-sm leading-relaxed text-ink-400">
-              A national-level innovation platform for {APP.region} — connecting students,
-              government departments, industry, mentors, and jury in one secure, scalable ecosystem.
+              {APP.university}’s internal qualifier for the {APP.parentEvent} — connecting students,
+              mentors, industry experts, and jury in one secure, scalable ecosystem.
             </p>
 
             {/* Social links */}
@@ -177,12 +173,12 @@ export function Footer() {
       <div className="relative border-t border-ink-800/60">
         <div className="flex w-full flex-col items-center justify-between gap-3 px-4 py-5 sm:flex-row sm:px-6 lg:px-8">
           <p className="text-xs text-ink-500">
-            © {new Date().getFullYear()} {APP.university}. An initiative for national-level innovation.
+            © {new Date().getFullYear()} {APP.university}. Internal qualifier for the {APP.parentEvent}.
           </p>
           <div className="flex gap-4 text-xs text-ink-500">
-            <Link to="/privacy" className="transition-colors hover:text-ink-300">Privacy Policy</Link>
-            <Link to="/terms" className="transition-colors hover:text-ink-300">Terms of Use</Link>
-            <Link to="/disclaimer" className="transition-colors hover:text-ink-300">Disclaimer</Link>
+            <a className="transition-colors hover:text-ink-300" href={`mailto:${APP.contactEmail}`}>
+              {APP.contactEmail}
+            </a>
           </div>
         </div>
       </div>

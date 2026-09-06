@@ -1,4 +1,4 @@
-# robots.txt for Smart Kopargaon Hackathon
+# robots.txt for the Internal Smart India Hackathon (Sanjivani University)
 # Public pages are listed in the sitemap. Private app areas require login,
 # are not linked publicly, and are excluded from the sitemap — so they are
 # not crawled or indexed. We intentionally do NOT enumerate them here.

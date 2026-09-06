@@ -24,7 +24,7 @@ import { SihProblemStatements } from '@/components/problems/SihProblemStatements
 // 'super_ps' is the flagship tier; 'open_innovation' is participant-authored.
 const PS_TYPE = { CURATED: 'curated', SUPER: 'super_ps', OPEN_INNOVATION: 'open_innovation' }
 
-// Official SKH category (Software/Hardware) and theme lists — shared source of truth.
+// Official category (Software/Hardware) and theme lists — shared source of truth.
 const TRACK_OPTIONS = PS_CATEGORIES
 const DOMAIN_OPTIONS = PS_THEMES
 
@@ -40,7 +40,7 @@ function slugPreview(raw) {
 }
 
 export function AdminProblemsPage() {
-  usePageSeo({ title: 'Problem Statements', description: 'SKH problem list.' })
+  usePageSeo({ title: 'Problem Statements', description: 'Internal SIH problem list.' })
   const api = useApi()
   const { eventId, eventLoading } = useEvent()
   const [rows, setRows] = useState([])

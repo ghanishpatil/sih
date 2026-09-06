@@ -9,6 +9,7 @@ import { randomInt } from 'crypto'
 import { getAuth } from 'firebase-admin/auth'
 import { FieldValue } from 'firebase-admin/firestore'
 import { getDb } from './firebaseAdmin.js'
+import { BRAND } from './brand.js'
 import { getActiveEvent } from './eventsService.js'
 import { sendCredentialsEmail, sendPasswordResetLinkEmail } from './emailService.js'
 
@@ -63,7 +64,7 @@ export async function inviteLeader(rawEmail, role = 'participant') {
 
   const tempPassword = generateTempPassword()
   const activeEvent = await getActiveEvent()
-  const eventName = activeEvent?.name || 'Smart Kopargaon Hackathon'
+  const eventName = activeEvent?.name || BRAND.name
 
   let userRecord
   try {
@@ -164,7 +165,7 @@ export async function sendResetLinkViaBrevo(rawEmail) {
   if (!isValidEmail(email)) return { ok: false, error: 'Invalid email' }
 
   const activeEvent = await getActiveEvent()
-  const eventName = activeEvent?.name || 'Smart Kopargaon Hackathon'
+  const eventName = activeEvent?.name || BRAND.name
 
   const frontendUrl = (process.env.FRONTEND_URL || '').replace(/\/$/, '')
   const actionCodeSettings = frontendUrl ? { url: `${frontendUrl}/auth`, handleCodeInApp: false } : undefined

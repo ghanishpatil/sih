@@ -61,8 +61,8 @@ function validateEnv() {
     )
   }
 
-  for (const w of warnings) console.warn(`[skh-backend] ⚠️  ENV WARNING: ${w}`)
-  for (const e of errors) console.error(`[skh-backend] ❌ ENV ERROR: ${e}`)
+  for (const w of warnings) console.warn(`[sih-backend] ⚠️  ENV WARNING: ${w}`)
+  for (const e of errors) console.error(`[sih-backend] ❌ ENV ERROR: ${e}`)
 }
 
 validateEnv()
@@ -82,11 +82,11 @@ const corsOrigins = (process.env.CORS_ORIGIN || '')
   .filter(Boolean)
 
 // Log parsed CORS origins at startup for debugging
-console.log(`[skh-backend] CORS origins (${corsOrigins.length}):`, corsOrigins)
+console.log(`[sih-backend] CORS origins (${corsOrigins.length}):`, corsOrigins)
 
 if (isProd && corsOrigins.length === 0) {
   console.error(
-    '[skh-backend] NODE_ENV=production requires CORS_ORIGIN (comma-separated frontend origins). Refusing to start with open CORS.',
+    '[sih-backend] NODE_ENV=production requires CORS_ORIGIN (comma-separated frontend origins). Refusing to start with open CORS.',
   )
   process.exit(1)
 }
@@ -414,15 +414,15 @@ app.use(notFound)
 app.use(errorHandler)
 
 app.listen(port, () => {
-  console.log(`[skh-backend] ${isProd ? 'production' : 'development'} listening on :${port}`)
+  console.log(`[sih-backend] ${isProd ? 'production' : 'development'} listening on :${port}`)
   void ensureHackathonInstall().catch((e) => {
-    console.warn('[skh-backend] Hackathon bootstrap skipped:', e.message)
+    console.warn('[sih-backend] Hackathon bootstrap skipped:', e.message)
   })
   // Begin periodic background scraping of SIH 2026 problem statements (live
   // submitted-idea counts). Fire-and-forget; never blocks or crashes boot.
   try {
     startSihAutoRefresh()
   } catch (e) {
-    console.warn('[skh-backend] SIH auto-refresh not started:', e.message)
+    console.warn('[sih-backend] SIH auto-refresh not started:', e.message)
   }
 })

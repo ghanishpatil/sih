@@ -13,6 +13,7 @@
  */
 
 import { getDb } from './firebaseAdmin.js'
+import { BRAND } from './brand.js'
 import {
   sendWelcomeEmail,
   sendPaymentConfirmationEmail,
@@ -28,7 +29,7 @@ import {
 
 /** Returns the configured frontend URL without trailing slash. */
 function getFrontendUrl() {
-  return (process.env.FRONTEND_URL || 'https://skh.example.com').replace(/\/$/, '')
+  return (process.env.FRONTEND_URL || 'https://sih.example.com').replace(/\/$/, '')
 }
 
 /** Chunk size for parallel email sends. Keeps concurrency reasonable without
@@ -158,7 +159,7 @@ export async function notifyRegistrationComplete({ teamId, eventName }) {
       to: leader.email,
       name: leader.displayName || 'Participant',
       teamName: team.name || 'Your Team',
-      eventName: eventName || 'Smart Kopargaon Hackathon',
+      eventName: eventName || BRAND.name,
     })
     console.log(`[Notify] Registration complete: ${teamId}`)
   } catch (err) {
@@ -460,7 +461,7 @@ export async function notifyQualified({ teamIds = null, eventId = '' } = {}) {
       if (m.teamId && !mrByTeam.has(m.teamId)) mrByTeam.set(m.teamId, { email: m.email || '', name: m.name || '' })
     })
 
-    const eventName = 'Smart Kopargaon Hackathon'
+    const eventName = BRAND.name
     const tasks = []
     let skipped = 0
     for (const t of targets) {

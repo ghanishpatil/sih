@@ -4,22 +4,11 @@ import { motion } from 'framer-motion'
 import { PublicLayout } from '@/layouts/PublicLayout.jsx'
 import { DashboardLayout } from '@/layouts/DashboardLayout.jsx'
 import { ProtectedRoute } from '@/routes/ProtectedRoute.jsx'
-import { LandingPage } from '@/pages/LandingPage.jsx'
-import { AboutPage } from '@/pages/AboutPage.jsx'
-import { ProblemsPage } from '@/pages/ProblemsPage.jsx'
-import { ContactPage } from '@/pages/ContactPage.jsx'
-import { HowToRegisterPage } from '@/pages/HowToRegisterPage.jsx'
-import { GrandFinalePage } from '@/pages/GrandFinalePage.jsx'
-import { PrivacyPolicyPage, TermsOfUsePage, DisclaimerPage } from '@/pages/LegalPages.jsx'
 import { AuthPage } from '@/pages/AuthPage.jsx'
-import { ChangePasswordPage } from '@/pages/ChangePasswordPage.jsx'
+import { ProblemsPage } from '@/pages/ProblemsPage.jsx'
 import { AnnouncementsPage } from '@/pages/AnnouncementsPage.jsx'
-import { TeamPage } from '@/pages/TeamPage.jsx'
-import { SponsorsPage } from '@/pages/SponsorsPage.jsx'
-import { FAQPage } from '@/pages/FAQPage.jsx'
 import { ResultsPage } from '@/pages/ResultsPage.jsx'
-import { GuidelinesPage } from '@/pages/GuidelinesPage.jsx'
-import { CodeOfConductPage } from '@/pages/CodeOfConductPage.jsx'
+import { ChangePasswordPage } from '@/pages/ChangePasswordPage.jsx'
 import { NotFoundPage } from '@/pages/NotFoundPage.jsx'
 import { AuthActionPage } from '@/pages/AuthActionPage.jsx'
 import { ROLES } from '@/utils/roles.js'
@@ -216,19 +205,22 @@ export default function App() {
     <Suspense fallback={<RouteFallback />}>
       <Routes>
         <Route element={<PublicLayout />}>
+          {/* Login is the front door of the site. */}
           <Route
             path="/"
             element={
               <AnimatedOutlet>
-                <LandingPage />
+                <AuthPage />
               </AnimatedOutlet>
             }
           />
+          {/* Legacy path — emails already in inboxes link to /auth, so keep it alive. */}
+          <Route path="/auth" element={<Navigate to="/" replace />} />
           <Route
-            path="/about"
+            path="/auth/action"
             element={
               <AnimatedOutlet>
-                <AboutPage />
+                <AuthActionPage />
               </AnimatedOutlet>
             }
           />
@@ -241,75 +233,10 @@ export default function App() {
             }
           />
           <Route
-            path="/contact"
-            element={
-              <AnimatedOutlet>
-                <ContactPage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
-            path="/how-to-register"
-            element={
-              <AnimatedOutlet>
-                <HowToRegisterPage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
-            path="/grand-finale"
-            element={
-              <AnimatedOutlet>
-                <GrandFinalePage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
-            path="/privacy"
-            element={
-              <AnimatedOutlet>
-                <PrivacyPolicyPage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
-            path="/terms"
-            element={
-              <AnimatedOutlet>
-                <TermsOfUsePage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
-            path="/disclaimer"
-            element={
-              <AnimatedOutlet>
-                <DisclaimerPage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
             path="/announcements"
             element={
               <AnimatedOutlet>
                 <AnnouncementsPage />
-              </AnimatedOutlet>
-            }
-          />
-
-          <Route
-            path="/sponsors"
-            element={
-              <AnimatedOutlet>
-                <SponsorsPage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
-            path="/faq"
-            element={
-              <AnimatedOutlet>
-                <FAQPage />
               </AnimatedOutlet>
             }
           />
@@ -318,46 +245,6 @@ export default function App() {
             element={
               <AnimatedOutlet>
                 <ResultsPage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
-            path="/guidelines"
-            element={
-              <AnimatedOutlet>
-                <GuidelinesPage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
-            path="/code-of-conduct"
-            element={
-              <AnimatedOutlet>
-                <CodeOfConductPage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
-            path="/team"
-            element={
-              <AnimatedOutlet>
-                <TeamPage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
-            path="/auth"
-            element={
-              <AnimatedOutlet>
-                <AuthPage />
-              </AnimatedOutlet>
-            }
-          />
-          <Route
-            path="/auth/action"
-            element={
-              <AnimatedOutlet>
-                <AuthActionPage />
               </AnimatedOutlet>
             }
           />

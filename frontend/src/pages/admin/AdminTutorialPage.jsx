@@ -21,7 +21,7 @@ const steps = [
       '**Where:** Admin → Settings',
       '',
       '**What to do first:**',
-      '1. The event "SKH 2026" is already created. You just need to configure it.',
+      '1. The event "Internal SIH 2026" is already created. You just need to configure it.',
       '2. Set **Team Size** — minimum 2, maximum 4 members.',
       '3. Set **Entry Fee** — enable it and enter the amount (e.g. ₹400).',
       '',

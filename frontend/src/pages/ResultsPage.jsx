@@ -39,7 +39,7 @@ export function ResultsPage() {
       {/* ═══════ HERO BANNER ═══════ */}
       <section className="relative overflow-hidden">
         <div className="absolute inset-0">
-          <img src="/skh-banner.png" alt="Smart Kopargaon Hackathon 2026" className="h-full w-full object-cover" draggable={false} />
+          <img src="/skh-banner.png" alt="Internal Smart India Hackathon 2026" className="h-full w-full object-cover" draggable={false} />
           <div className="absolute inset-0 bg-gradient-to-r from-ink-950/85 via-ink-950/65 to-ink-950/85" />
           <div className="absolute inset-0 bg-gradient-to-t from-ink-950/95 via-transparent to-ink-950/40" />
         </div>
@@ -47,7 +47,7 @@ export function ResultsPage() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white backdrop-blur-sm">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-sm shadow-emerald-400" />
-              {APP.shortName || 'SKH'} 2026 · Final Standings
+              {APP.shortName} 2026 · Final Standings
             </div>
             <h1 className="font-display text-3xl font-extrabold tracking-tight text-white sm:text-4xl lg:text-5xl">
               Results

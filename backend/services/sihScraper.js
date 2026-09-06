@@ -205,7 +205,7 @@ async function fetchSihHtml() {
       signal: controller.signal,
       headers: {
         'User-Agent':
-          'Mozilla/5.0 (compatible; SKH-Platform/1.0; +https://skh.sanjivaniuniversity.com)',
+          'Mozilla/5.0 (compatible; SIH-Internal-Platform/1.0; +https://skh.sanjivaniuniversity.com)',
         Accept: 'text/html',
       },
     })

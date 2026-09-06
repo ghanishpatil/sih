@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import { FieldValue, Timestamp } from 'firebase-admin/firestore'
 import { getDb } from '../services/firebaseAdmin.js'
+import { BRAND } from '../services/brand.js'
 import { verifyFirebaseToken, loadUserRole, requireRole, syncRoleClaim } from '../middleware/auth.js'
 import { attachEventContext } from '../middleware/eventContext.js'
 import { judgeMayEvaluateTeam } from '../services/eventConfig.js'
@@ -117,7 +118,7 @@ async function mergedPublicSnapshot(eventId) {
 const r = Router()
 
 r.get('/health', (_req, res) => {
-  res.json({ ok: true, service: 'skh-backend', time: new Date().toISOString() })
+  res.json({ ok: true, service: 'sih-backend', time: new Date().toISOString() })
 })
 
 /**
@@ -4003,7 +4004,7 @@ export function adminRouter() {
         to: adminEmail,
         name: 'Admin (Test)',
         teamName: 'Test Team',
-        eventName: 'Smart Kopargaon Hackathon (TEST)',
+        eventName: `${BRAND.name} (TEST)`,
       })
       await appendAuditLog({
         actorUid: req.user.uid,
