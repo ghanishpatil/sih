@@ -3685,6 +3685,94 @@ export function adminRouter() {
     }
   })
 
+  /**
+   * Admin report: participant counts grouped by department.
+   *
+   * Departments are captured per member at registration time on
+   * `memberRegistrations`. Within each team the LEADER is the row flagged
+   * `isLeader` (falling back to the lowest `order`); every other row in that team
+   * is a non-leader member. Returns, per department: leaders, members and the
+   * combined total — plus grand totals.
+   *
+   * Ported from scripts/count-participants-by-department.js so the Reports page
+   * and the CLI produce identical numbers.
+   */
+  router.get('/reports/participants-by-department', async (req, res, next) => {
+    try {
+      const rawAll = req.query.all === '1'
+      const eventId = rawAll ? '' : typeof req.query.eventId === 'string' ? req.query.eventId.trim() : req.eventId
+
+      // memberRegistrations rows carry no eventId, so scope by joining through teams.
+      let allowedTeamIds = null
+      if (eventId) {
+        const tSnap = await db().collection('teams').where('eventId', '==', eventId).limit(5000).get()
+        allowedTeamIds = new Set(tSnap.docs.map((d) => d.id))
+      }
+
+      const snap = await db().collection('memberRegistrations').limit(20000).get()
+
+      // Group rows by team so the leader can be identified within each team.
+      const membersByTeam = new Map()
+      let skippedOutOfScope = 0
+      for (const doc of snap.docs) {
+        const m = doc.data() || {}
+        const teamId = m.teamId || doc.id
+        if (allowedTeamIds && !allowedTeamIds.has(teamId)) { skippedOutOfScope += 1; continue }
+        if (!membersByTeam.has(teamId)) membersByTeam.set(teamId, [])
+        membersByTeam.get(teamId).push(m)
+      }
+
+      const UNSET = '(not set)'
+      const byDept = new Map() // department -> { leaders, members }
+      const bump = (dept, key) => {
+        if (!byDept.has(dept)) byDept.set(dept, { leaders: 0, members: 0 })
+        byDept.get(dept)[key] += 1
+      }
+
+      let totalLeaders = 0
+      let totalMembers = 0
+
+      for (const members of membersByTeam.values()) {
+        const sorted = members.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        const leader = sorted.find((x) => x.isLeader) || sorted[0] || {}
+        for (const m of sorted) {
+          const dept = String(m.department || '').trim() || UNSET
+          if (m === leader) { bump(dept, 'leaders'); totalLeaders += 1 }
+          else { bump(dept, 'members'); totalMembers += 1 }
+        }
+      }
+
+      const totalAll = totalLeaders + totalMembers
+      const rows = [...byDept.entries()]
+        .map(([department, v]) => ({
+          department,
+          leaders: v.leaders,
+          members: v.members,
+          total: v.leaders + v.members,
+          pctOfTotal: totalAll > 0 ? Math.round(((v.leaders + v.members) / totalAll) * 1000) / 10 : 0,
+        }))
+        .sort((a, b) => b.total - a.total || a.department.localeCompare(b.department))
+
+      res.json({
+        eventId: eventId || null,
+        rows,
+        totals: {
+          leaders: totalLeaders,
+          members: totalMembers,
+          total: totalAll,
+          teams: membersByTeam.size,
+          departments: rows.filter((r) => r.department !== UNSET).length,
+        },
+        // Transparency: registrations excluded because their team is not in this
+        // event (or the team was deleted), and members with no department set.
+        skippedOutOfScope,
+        unsetDepartmentTotal: byDept.has(UNSET) ? byDept.get(UNSET).leaders + byDept.get(UNSET).members : 0,
+      })
+    } catch (e) {
+      next(e)
+    }
+  })
+
   /** Export mentor notes */
   router.get('/export/mentor-notes', async (req, res, next) => {
     try {

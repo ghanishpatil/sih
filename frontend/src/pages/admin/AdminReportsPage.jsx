@@ -72,6 +72,7 @@ export function AdminReportsPage() {
   const [archivedEvals, setArchivedEvals] = useState([])
   const [problems, setProblems] = useState([])
   const [users, setUsers] = useState([])
+  const [deptReport, setDeptReport] = useState(null)
   const [collegeByTeam, setCollegeByTeam] = useState(new Map())
   const [collegeFilter, setCollegeFilter] = useState('all')
   const [loading, setLoading] = useState(true)
@@ -80,7 +81,7 @@ export function AdminReportsPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [s, t, sub, evRows, ps, tc, arch, us] = await Promise.all([
+      const [s, t, sub, evRows, ps, tc, arch, us, dept] = await Promise.all([
         api.adminStats(),
         api.adminTeams(),
         api.adminSubmissions(),
@@ -89,6 +90,7 @@ export function AdminReportsPage() {
         api.adminTeamColleges().catch(() => ({ teams: [] })),
         api.listAdminArchivedEvaluations().catch(() => ({ items: [] })),
         api.listUsers().catch(() => []),
+        api.getParticipantsByDepartment().catch(() => null),
       ])
       setStats(s)
       setTeams(Array.isArray(t) ? t : [])
@@ -97,6 +99,7 @@ export function AdminReportsPage() {
       setArchivedEvals(Array.isArray(arch?.items) ? arch.items : [])
       setProblems(Array.isArray(ps) ? ps : [])
       setUsers(Array.isArray(us) ? us : [])
+      setDeptReport(Array.isArray(dept?.rows) ? dept : null)
       const cm = new Map()
       for (const row of (Array.isArray(tc?.teams) ? tc.teams : [])) {
         cm.set(row.teamId, { college: row.college || '', prn: row.prn || '' })
@@ -270,6 +273,31 @@ export function AdminReportsPage() {
     ])
   }
 
+  // Department-wise participant report (server-aggregated from
+  // memberRegistrations). Leaders vs non-leader members are counted separately
+  // so the CSV can be reconciled against team counts.
+  const departmentColumns = [
+    { header: 'Department', accessor: (r) => r.department },
+    { header: 'Team Leaders', accessor: (r) => r.leaders },
+    { header: 'Members', accessor: (r) => r.members },
+    { header: 'Total Participants', accessor: (r) => r.total },
+    { header: '% of Total', accessor: (r) => r.pctOfTotal },
+  ]
+
+  // Appends a GRAND TOTAL row so the CSV is self-contained for sign-off.
+  function departmentCsvRows() {
+    const rows = deptReport?.rows || []
+    const t = deptReport?.totals || { leaders: 0, members: 0, total: 0 }
+    return [
+      ...rows,
+      { department: 'GRAND TOTAL', leaders: t.leaders, members: t.members, total: t.total, pctOfTotal: 100 },
+    ]
+  }
+
+  function exportParticipantsByDepartment() {
+    downloadCsv(`participants-by-department-${Date.now()}.csv`, departmentCsvRows(), departmentColumns)
+  }
+
   // Readable label maps for exports.
   const judgeLabelById = useMemo(() => {
     const m = new Map()
@@ -373,6 +401,11 @@ export function AdminReportsPage() {
         { header: 'Track', accessor: (r) => r.category || '' },
         { header: 'Teams Selected', accessor: (r) => (typeof r.selectionCount === 'number' ? r.selectionCount : 0) },
       ])
+
+      if (deptReport?.rows?.length) {
+        await sleep(400)
+        downloadCsv(`ALL-participants-by-department-${stamp}.csv`, departmentCsvRows(), departmentColumns)
+      }
     } finally {
       setExportingAll(false)
     }
@@ -851,6 +884,86 @@ export function AdminReportsPage() {
         </Card>
       )}
 
+      {/* Participants by Department */}
+      <Card>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="font-display text-lg font-semibold text-ink-900">Participants by Department</h2>
+            <p className="mt-1 text-xs text-ink-500">
+              Team leaders vs members, grouped by the department each participant entered at registration.
+            </p>
+          </div>
+          <Button
+            className="no-print gap-1.5"
+            variant="secondary"
+            type="button"
+            disabled={!deptReport?.rows?.length}
+            onClick={exportParticipantsByDepartment}
+          >
+            <Download className="h-4 w-4" /> Download CSV
+          </Button>
+        </div>
+
+        {!deptReport ? (
+          <p className="mt-6 text-center text-sm text-ink-400">
+            {loading ? 'Loading department breakdown…' : 'Department breakdown unavailable.'}
+          </p>
+        ) : deptReport.rows.length === 0 ? (
+          <p className="mt-6 text-center text-sm text-ink-400">No registered participants yet.</p>
+        ) : (
+          <>
+            <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <StatMini label="Team Leaders" value={deptReport.totals.leaders} tone="brand" />
+              <StatMini label="Members" value={deptReport.totals.members} tone="success" />
+              <StatMini label="Total Participants" value={deptReport.totals.total} tone="warn" />
+              <StatMini label="Departments" value={deptReport.totals.departments} tone="neutral" />
+            </div>
+
+            <div className="mt-5 overflow-x-auto">
+              <table className="w-full min-w-[520px] text-sm">
+                <thead>
+                  <tr className="border-b border-[rgb(var(--border))] text-left text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+                    <th className="py-2 pr-3">Department</th>
+                    <th className="py-2 pr-3 text-right">Leaders</th>
+                    <th className="py-2 pr-3 text-right">Members</th>
+                    <th className="py-2 pr-3 text-right">Total</th>
+                    <th className="py-2 text-right">% of Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {deptReport.rows.map((r) => (
+                    <tr key={r.department} className="border-b border-[rgb(var(--border))]/60">
+                      <td className="py-2 pr-3 text-ink-900">{r.department}</td>
+                      <td className="py-2 pr-3 text-right font-mono text-ink-700">{r.leaders}</td>
+                      <td className="py-2 pr-3 text-right font-mono text-ink-700">{r.members}</td>
+                      <td className="py-2 pr-3 text-right font-mono font-semibold text-ink-900">{r.total}</td>
+                      <td className="py-2 text-right font-mono text-ink-500">{r.pctOfTotal}%</td>
+                    </tr>
+                  ))}
+                  <tr className="bg-[rgb(var(--surface-muted))] font-semibold">
+                    <td className="py-2.5 pr-3 text-ink-900">GRAND TOTAL</td>
+                    <td className="py-2.5 pr-3 text-right font-mono text-ink-900">{deptReport.totals.leaders}</td>
+                    <td className="py-2.5 pr-3 text-right font-mono text-ink-900">{deptReport.totals.members}</td>
+                    <td className="py-2.5 pr-3 text-right font-mono text-ink-900">{deptReport.totals.total}</td>
+                    <td className="py-2.5 text-right font-mono text-ink-500">100%</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <p className="mt-3 text-xs text-ink-500">
+              Counted across {deptReport.totals.teams} registered team(s) — one leader per team, everyone else counts as a member.
+              {deptReport.unsetDepartmentTotal > 0
+                ? ` ${deptReport.unsetDepartmentTotal} participant(s) have no department saved and appear as “(not set)”.`
+                : ''}
+              {deptReport.skippedOutOfScope > 0
+                ? ` ${deptReport.skippedOutOfScope} registration(s) were excluded because their team is not part of this event.`
+                : ''}
+            </p>
+          </>
+        )}
+      </Card>
+
       {/* Export Center */}
       <Card>
         <h2 className="font-display text-lg font-semibold text-ink-900">Export Center</h2>
@@ -869,6 +982,14 @@ export function AdminReportsPage() {
             { header: 'GitHub', accessor: (r) => r.githubUrl ? 'Yes' : 'No' },
           ])}>Submissions CSV</Button>
           <Button variant="secondary" type="button" disabled={!evals.length} onClick={exportEvaluations}>Evaluations CSV</Button>
+          <Button
+            variant="secondary"
+            type="button"
+            disabled={!deptReport?.rows?.length}
+            onClick={exportParticipantsByDepartment}
+          >
+            Participants by Department CSV
+          </Button>
           {archivedEvals.length > 0 ? (
             <Button variant="secondary" type="button" onClick={() => downloadCsv(`evaluations-archived-${Date.now()}.csv`, archivedEvals, [
               { header: 'Archive Label', accessor: (r) => r.archiveLabel || '' },
