@@ -124,6 +124,14 @@ export function ParticipantRegistrationPage() {
   const totalMembers = declaredSize || submittedMembers
   const allMembersSubmitted = declaredSize > 0 && submittedMembers >= declaredSize
   const registrationProgress = totalMembers > 0 ? Math.min(100, (submittedMembers / totalMembers) * 100) : 0
+  // A brand-new team has no `teamSize` yet — it is only written by the first
+  // register-team-members save — so both counts are 0 until the leader saves the
+  // form. Guard on that instead of rendering "0 of 0", which reads as though the
+  // team genuinely has zero members.
+  const memberCountsKnown = totalMembers > 0
+  const memberProgressLabel = memberCountsKnown
+    ? `${submittedMembers} of ${totalMembers} members completed`
+    : 'Not started — enter member details'
 
   // Determine registration close date
   const registrationCloseDate = eventCfg?.registrationClosesAt
@@ -458,7 +466,7 @@ export function ParticipantRegistrationPage() {
                   <StepRow
                     n={1}
                     title="Member details"
-                    subtitle={`${submittedMembers} of ${totalMembers} members completed`}
+                    subtitle={memberProgressLabel}
                     done={allMembersSubmitted}
                     active={Boolean(team) && !allMembersSubmitted}
                   />
@@ -490,12 +498,14 @@ export function ParticipantRegistrationPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="text-sm font-medium text-ink-600">
-                      {submittedMembers} / {totalMembers}
+                      {memberCountsKnown ? `${submittedMembers} / ${totalMembers}` : '—'}
                     </span>
                     {allMembersSubmitted ? (
                       <Badge tone="success" uppercase={false}>Complete</Badge>
-                    ) : (
+                    ) : memberCountsKnown ? (
                       <Badge tone="warn" uppercase={false}>In Progress</Badge>
+                    ) : (
+                      <Badge tone="neutral" uppercase={false}>Not started</Badge>
                     )}
                   </div>
                 </div>
@@ -675,18 +685,34 @@ export function ParticipantRegistrationPage() {
                       </h3>
                       <p className="mt-1 text-sm text-ink-600">
                         {isLeader ? (
+                          memberCountsKnown ? (
+                            <>
+                              As team leader, fill out registration details for all {totalMembers} team
+                              members above before proceeding.
+                            </>
+                          ) : (
+                            <>
+                              As team leader, choose your team size and fill in every member&apos;s details in
+                              the form above, then save them to continue.
+                            </>
+                          )
+                        ) : memberCountsKnown ? (
                           <>
-                            As team leader, fill out registration details for all {totalMembers} team members above before proceeding.
+                            The team leader must complete registration for all {totalMembers} team members
+                            before you can proceed.
                           </>
                         ) : (
                           <>
-                            The team leader must complete registration for all {totalMembers} team members before you can proceed.
+                            Your team leader hasn&apos;t saved the team&apos;s member details yet. You&apos;ll
+                            be able to proceed once they do.
                           </>
                         )}
                       </p>
-                      <p className="mt-2 text-sm font-medium text-amber-700">
-                        Currently: {submittedMembers} of {totalMembers} completed
-                      </p>
+                      {memberCountsKnown ? (
+                        <p className="mt-2 text-sm font-medium text-amber-700">
+                          Currently: {submittedMembers} of {totalMembers} completed
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                 </Card>
@@ -716,7 +742,9 @@ export function ParticipantRegistrationPage() {
         <div className="rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--surface-muted))]/50 px-3 py-2 text-sm">
           <p className="font-semibold text-ink-900">{team?.name || 'Your team'}</p>
           <p className="mt-0.5 text-xs text-ink-500">
-            {submittedMembers} of {totalMembers} member{totalMembers === 1 ? '' : 's'} submitted
+            {memberCountsKnown
+              ? `${submittedMembers} of ${totalMembers} member${totalMembers === 1 ? '' : 's'} submitted`
+              : 'No member details saved yet'}
           </p>
         </div>
         <ul className="max-h-56 space-y-2 overflow-y-auto">
