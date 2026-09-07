@@ -5130,6 +5130,7 @@ export function judgesRouter() {
         evaluationLocked: locked,
         scores,
         feedback,
+        judgeStatus: e.judgeStatus || null,
         submittedAt: tsIso(e.submittedAt),
         updatedAt: tsIso(e.updatedAt),
       }
@@ -5179,6 +5180,7 @@ export function judgesRouter() {
       feedbackA,
       feedbackB,
       finalScorePct: typeof e.finalScorePct === 'number' ? e.finalScorePct : null,
+      judgeStatus: e.judgeStatus || null,
       submittedAtA: tsIso(e.submittedAtA),
       submittedAtB: tsIso(e.submittedAtB),
       submittedAt: tsIso(e.submittedAt),
@@ -5500,7 +5502,7 @@ export function judgesRouter() {
    */
   router.post('/evaluations', async (req, res, next) => {
     try {
-      const { teamId, part, scores, feedback, draft } = req.body || {}
+      const { teamId, part, scores, feedback, draft, status } = req.body || {}
       if (!teamId || !scores) {
         return res.status(400).json({ error: 'teamId and scores required' })
       }
@@ -5514,6 +5516,12 @@ export function judgesRouter() {
       const feedbackText = String(feedback ?? '').slice(0, 8000)
       const isDraft = draft === true
       const requestedPart = part === 'A' || part === 'B' ? part : null
+
+      // Judge's verdict/status for this team. Persisted only on a FINAL submit
+      // (single-rubric, or Part B of a two-part evaluation). Constrained to a
+      // fixed 3-value set — anything else is ignored so it can never be spoofed.
+      const JUDGE_VERDICTS = new Set(['accepted', 'thoroughly', 'rejected'])
+      const judgeStatus = typeof status === 'string' && JUDGE_VERDICTS.has(status) ? status : null
 
       const teamSnap = await db().doc(`teams/${teamId}`).get()
       if (!teamSnap.exists) return res.status(404).json({ error: 'Team not found' })
@@ -5694,6 +5702,7 @@ export function judgesRouter() {
               payload.finalScorePct = computed.finalScorePct
               payload.evaluationStatus = 'submitted'
               payload.submittedAt = FieldValue.serverTimestamp()
+              if (judgeStatus) payload.judgeStatus = judgeStatus
               finalScorePctOut = computed.finalScorePct
             } else {
               // Only Part A submitted so far — overall evaluation is still "draft".
@@ -5732,6 +5741,7 @@ export function judgesRouter() {
             payload.feedback = feedbackText
             payload.evaluationStatus = 'submitted'
             payload.submittedAt = FieldValue.serverTimestamp()
+            if (judgeStatus) payload.judgeStatus = judgeStatus
             payload.draftScores = FieldValue.delete()
             payload.draftFeedback = FieldValue.delete()
           }

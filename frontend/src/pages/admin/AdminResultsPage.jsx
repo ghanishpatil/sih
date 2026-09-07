@@ -12,6 +12,11 @@ import { downloadCsv } from '@/utils/csvExport.js'
 const STATUS_TONE = { qualified: 'success', waitlist: 'warn', not_qualified: 'danger' }
 const STATUS_LABEL = { qualified: 'Qualified', waitlist: 'Waitlist', not_qualified: 'Not qualified' }
 
+// Per-judge verdict recorded on each evaluation (separate from the admin's
+// team-level juryStatus above).
+const JUDGE_VERDICT_TONE = { accepted: 'success', thoroughly: 'warn', rejected: 'danger' }
+const JUDGE_VERDICT_LABEL = { accepted: 'Accepted', thoroughly: 'Thoroughly', rejected: 'Rejected' }
+
 /** Per-criterion breakdown for one rubric part: items [{label, score, max}], total, maxTotal, pct. */
 function partBreakdown(criteria, scores) {
   const crit = Array.isArray(criteria) && criteria.length > 0 ? criteria : null
@@ -142,16 +147,31 @@ export function AdminResultsPage() {
       .filter((t) => t.problemStatementId) // teams that picked a PS
       .map((t) => {
         const teamEvals = byTeam.get(t.id) || []
-        const evaluations = teamEvals.map((e) => ({
-          judgeId: e.judgeId || '',
-          judgeLabel: judgeById.get(e.judgeId) || e.judgeId || 'Judge',
-          feedback: typeof e.feedback === 'string' ? e.feedback : '',
-          feedbackA: typeof e.feedbackA === 'string' ? e.feedbackA : '',
-          feedbackB: typeof e.feedbackB === 'string' ? e.feedbackB : '',
-          ...evalBreakdown(e),
-        }))
+        const evaluations = teamEvals.map((e) => {
+          const b = evalBreakdown(e)
+          // Raw marks for this judge: single = its total; two-part = A + B summed.
+          const marksTotal = b.twoPart ? b.partA.total + b.partB.total : b.total
+          const marksMax = b.twoPart ? b.partA.maxTotal + b.partB.maxTotal : b.maxTotal
+          return {
+            judgeId: e.judgeId || '',
+            judgeLabel: judgeById.get(e.judgeId) || e.judgeId || 'Judge',
+            feedback: typeof e.feedback === 'string' ? e.feedback : '',
+            feedbackA: typeof e.feedbackA === 'string' ? e.feedbackA : '',
+            feedbackB: typeof e.feedbackB === 'string' ? e.feedbackB : '',
+            judgeStatus: typeof e.judgeStatus === 'string' ? e.judgeStatus : '',
+            marksTotal,
+            marksMax,
+            ...b,
+          }
+        })
         const avg = evaluations.length
           ? evaluations.reduce((s, x) => s + x.pct, 0) / evaluations.length
+          : 0
+        const avgTotal = evaluations.length
+          ? evaluations.reduce((s, x) => s + x.marksTotal, 0) / evaluations.length
+          : 0
+        const avgMax = evaluations.length
+          ? evaluations.reduce((s, x) => s + x.marksMax, 0) / evaluations.length
           : 0
         const ps = psMap.get(t.problemStatementId)
         const cl = collegeByTeam.get(t.id) || {}
@@ -168,6 +188,8 @@ export function AdminResultsPage() {
           judgeNames: evaluations.map((x) => x.judgeLabel).join(', '),
           evaluations,
           avg: Math.round(avg * 10) / 10,
+          avgTotal: Math.round(avgTotal * 10) / 10,
+          avgMax: Math.round(avgMax),
           juryStatus: t.juryStatus || '',
         }
       })
@@ -212,8 +234,10 @@ export function AdminResultsPage() {
       { header: 'College', accessor: (r) => r.college },
       { header: 'Leader PRN', accessor: (r) => r.prn },
       { header: 'Avg %', accessor: (r) => r.avg },
+      { header: 'Avg Marks', accessor: (r) => `${r.avgTotal}/${r.avgMax}` },
       { header: 'Judges', accessor: (r) => r.judges },
       { header: 'Judge(s)', accessor: (r) => r.judgeNames },
+      { header: 'Judge Verdicts', accessor: (r) => r.evaluations.map((x) => `${x.judgeLabel}: ${JUDGE_VERDICT_LABEL[x.judgeStatus] || '—'}`).join('; ') },
       { header: 'Status', accessor: (r) => STATUS_LABEL[r.juryStatus] || '' },
     ])
   }
@@ -500,7 +524,16 @@ export function AdminResultsPage() {
                           </div>
                         </td>
                         <td className="px-3 py-2 text-right font-mono font-semibold text-ink-900">
-                          {r.judges > 0 ? `${r.avg}%` : <span className="text-ink-400">—</span>}
+                          {r.judges > 0 ? (
+                            <>
+                              {r.avg}%
+                              <span className="block text-[10px] font-normal text-ink-500">
+                                {r.avgTotal}/{r.avgMax} marks
+                              </span>
+                            </>
+                          ) : (
+                            <span className="text-ink-400">—</span>
+                          )}
                         </td>
                         <td className="px-3 py-2">
                           {r.judges > 0 ? (
@@ -577,6 +610,11 @@ export function AdminResultsPage() {
                                       <Gavel className="h-3.5 w-3.5 text-brand-600" />
                                       <span className="text-sm font-medium text-ink-900">{ev.judgeLabel}</span>
                                       {ev.twoPart ? <Badge tone="brand" className="text-[10px]">Two-part</Badge> : null}
+                                      {ev.judgeStatus ? (
+                                        <Badge tone={JUDGE_VERDICT_TONE[ev.judgeStatus] || 'neutral'} className="text-[10px]">
+                                          {JUDGE_VERDICT_LABEL[ev.judgeStatus] || ev.judgeStatus}
+                                        </Badge>
+                                      ) : null}
                                     </div>
                                     <span className="font-mono text-xs font-semibold text-ink-900">
                                       {ev.twoPart ? (

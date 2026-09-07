@@ -247,6 +247,42 @@ function PanelStatus({ panel }) {
   )
 }
 
+// The judge's verdict for a team, chosen before the final submit. Labels are
+// shown to the judge; the value is what gets persisted on the evaluation.
+const JUDGE_STATUS_OPTIONS = [
+  { value: 'accepted', label: 'Accepted', active: 'border-emerald-500 bg-emerald-500/10 text-emerald-700' },
+  { value: 'thoroughly', label: 'Thoroughly', active: 'border-amber-500 bg-amber-500/10 text-amber-700' },
+  { value: 'rejected', label: 'Rejected', active: 'border-red-500 bg-red-500/10 text-red-700' },
+]
+
+function JudgeStatusPicker({ value, onChange, disabled }) {
+  const base =
+    'rounded-xl border px-3 py-2 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50'
+  const inactive = 'border-[rgb(var(--border))] text-ink-600 hover:bg-[rgb(var(--surface-muted))]'
+  return (
+    <div className="mt-6">
+      <p className="text-xs font-semibold uppercase tracking-wide text-ink-600">
+        Your status for this team <span className="text-red-500">*</span>
+      </p>
+      <p className="mt-0.5 text-[11px] text-ink-500">Pick one before submitting your final evaluation.</p>
+      <div className="mt-2 grid grid-cols-3 gap-2">
+        {JUDGE_STATUS_OPTIONS.map((o) => (
+          <button
+            key={o.value}
+            type="button"
+            disabled={disabled}
+            aria-pressed={value === o.value}
+            onClick={() => onChange(o.value)}
+            className={`${base} ${value === o.value ? o.active : inactive}`}
+          >
+            {o.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export function JudgeTeamReviewPage() {
   const { teamId } = useParams()
   const api = useApi()
@@ -293,6 +329,8 @@ export function JudgeTeamReviewPage() {
   // Department jury panel: co-judges, how many have submitted, and the averaged
   // final score (the server withholds a co-judge's score until ALL have submitted).
   const [panel, setPanel] = useState(null)
+  // Judge's verdict (accepted / thoroughly / rejected) — required on final submit.
+  const [judgeStatus, setJudgeStatus] = useState('')
 
   usePageSeo({ title: 'Team review', description: 'Scoped jury evaluation.' })
 
@@ -312,6 +350,7 @@ export function JudgeTeamReviewPage() {
       setSubmission(data.submission)
       setEvaluation(data.evaluation)
       setEdition(data.edition)
+      setJudgeStatus(data.evaluation?.judgeStatus || '')
 
       const isTwoPart = data.edition?.scoringMode === 'twoPart'
       setTwoPart(isTwoPart)
@@ -407,6 +446,7 @@ export function JudgeTeamReviewPage() {
       scores: buildScoresPayload(criteria, scores),
       feedback,
       draft,
+      status: judgeStatus,
     }
   }
 
@@ -422,7 +462,7 @@ export function JudgeTeamReviewPage() {
       scores: buildScoresPayload(combinedCrit, isA ? scoresA : scoresB),
       feedback: isA ? feedbackA : feedbackB,
       draft,
-
+      status: judgeStatus,
     }
   }
 
@@ -452,6 +492,10 @@ export function JudgeTeamReviewPage() {
   async function submitSingleFinal() {
     if (!teamId || !canEditAtAll) return
     setMsg('')
+    if (!judgeStatus) {
+      setMsg('Select a status (Accepted / Thoroughly / Rejected) before submitting.')
+      return
+    }
     try {
       const res = await api.submitEvaluation(buildSinglePayload(false))
       dirty.current = false
@@ -466,6 +510,10 @@ export function JudgeTeamReviewPage() {
   async function submitPart(part) {
     if (!teamId || !canEditAtAll) return
     setMsg('')
+    if (part === 'B' && !judgeStatus) {
+      setMsg('Select a status (Accepted / Thoroughly / Rejected) before submitting.')
+      return
+    }
     try {
       const res = await api.submitEvaluation(buildPartPayload(part, false))
       dirty.current = false
@@ -930,6 +978,8 @@ export function JudgeTeamReviewPage() {
                           />
                         </div>
 
+                        <JudgeStatusPicker value={judgeStatus} onChange={setJudgeStatus} disabled={!canEditB} />
+
                       </>
                     ) : null}
 
@@ -1017,6 +1067,8 @@ export function JudgeTeamReviewPage() {
                     rows={5}
                   />
                 </div>
+
+                <JudgeStatusPicker value={judgeStatus} onChange={setJudgeStatus} disabled={!canEditAtAll} />
 
                 <div className="mt-6 flex flex-col gap-2 sm:flex-row">
                   <Button variant="secondary" type="button" disabled={!canEditAtAll} className="gap-2" onClick={saveDraftNow}>
