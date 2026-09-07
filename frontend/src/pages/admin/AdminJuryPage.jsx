@@ -12,7 +12,7 @@ import {
   displayTheme,
 } from '@/utils/problemStatementDisplay.js'
 import { ROLES } from '@/utils/roles.js'
-import { PS_THEMES, PS_CATEGORIES } from '@/utils/constants.js'
+import { PS_THEMES, PS_CATEGORIES, DEPARTMENTS as APP_DEPARTMENTS } from '@/utils/constants.js'
 import { Card } from '@/components/ui/Card.jsx'
 import { Button } from '@/components/ui/Button.jsx'
 import { Badge } from '@/components/ui/Badge.jsx'
@@ -47,12 +47,10 @@ function parseTeamNameList(text) {
 const DOMAINS = PS_THEMES
 const TRACKS = PS_CATEGORIES
 
-// Departments — mirrors the participant registration form. A judge assigned to a
-// department evaluates every team whose (leader's) department matches.
-const DEPARTMENTS = [
-  'Cyber Security', 'AIDS', 'AIML', 'CSE', 'Mechanical', 'MCA', 'BCA',
-  'Integrated B.Tech', 'Integrated M.Tech', 'BBA', 'BCOM', 'MBA', 'B.SC', 'M.SC',
-]
+// Departments come from the shared constants list (same one the participant
+// registration form uses). A judge assigned to a department evaluates every team
+// whose (leader's) department matches.
+const DEPARTMENTS = APP_DEPARTMENTS
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

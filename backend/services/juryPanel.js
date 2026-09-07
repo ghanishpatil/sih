@@ -27,10 +27,19 @@
 // ─────────────────────────────────────────────────────────────────────────────
 import { computePartTotal } from '../utils/evaluationScores.js'
 
-/** Departments a team/judge can belong to (mirrors the participant registration form). */
+/**
+ * Departments a team/judge can belong to — the BACKEND source of truth.
+ *
+ * Must stay in sync with `DEPARTMENTS` in `frontend/src/utils/constants.js`.
+ * A department missing here is silently dropped from jury panels and rejected by
+ * `POST /admin/judges/assign-department`, which would leave those teams with no
+ * panel and therefore no final score.
+ */
 export const JURY_DEPARTMENTS = [
   'Cyber Security', 'AIDS', 'AIML', 'CSE', 'Mechanical', 'MCA', 'BCA',
   'Integrated B.Tech', 'Integrated M.Tech', 'BBA', 'BCOM', 'MBA', 'B.SC', 'M.SC',
+  // Science & Pharmacy departments
+  'Microbiology', 'Chemistry', 'Food Science and Nutrition', 'B.Pharm',
 ]
 
 export const MAX_PANEL_SIZE = 5

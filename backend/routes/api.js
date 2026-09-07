@@ -2783,13 +2783,11 @@ export function adminRouter() {
   const JUDGE_VALID_DOMAINS = PS_THEMES
   const JUDGE_VALID_TRACKS = PS_CATEGORIES
 
-  // Departments a judge can be assigned to (mirrors the participant registration
-  // form). A judge assigned to a department evaluates every team whose team-level
-  // department (the leader's department) matches — regardless of problem statement.
-  const JUDGE_VALID_DEPARTMENTS = [
-    'Cyber Security', 'AIDS', 'AIML', 'CSE', 'Mechanical', 'MCA', 'BCA',
-    'Integrated B.Tech', 'Integrated M.Tech', 'BBA', 'BCOM', 'MBA', 'B.SC', 'M.SC',
-  ]
+  // Departments a judge can be assigned to. A judge assigned to a department
+  // evaluates every team whose team-level department (the leader's department)
+  // matches — regardless of problem statement.
+  // Reuses the jury-panel list so the two can never drift out of sync.
+  const JUDGE_VALID_DEPARTMENTS = JURY_DEPARTMENTS
 
   /** Assign a judge to a department (arrayUnion into users.assignedDepartments). */
   router.post('/judges/assign-department', async (req, res, next) => {

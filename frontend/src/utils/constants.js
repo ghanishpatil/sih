@@ -31,6 +31,37 @@ export const SOCIAL_LINKS = {
 // Single source of truth used by the hero CTA, auth page, and How to Register page.
 export const REGISTRATION_URL = 'https://ums.sanjivani.edu.in//EventRegistration/D0712D97-8DF'
 
+/**
+ * Departments a participant can belong to — the FRONTEND source of truth.
+ *
+ * Used by the team registration form and by the admin jury-panel builder. The
+ * team leader's department decides which jury panel evaluates the team, so this
+ * list MUST stay in sync with `JURY_DEPARTMENTS` in
+ * `backend/services/juryPanel.js`. A department present here but missing there
+ * is rejected server-side and those teams would never get a panel.
+ */
+export const DEPARTMENTS = [
+  'Cyber Security',
+  'AIDS',
+  'AIML',
+  'CSE',
+  'Mechanical',
+  'MCA',
+  'BCA',
+  'Integrated B.Tech',
+  'Integrated M.Tech',
+  'BBA',
+  'BCOM',
+  'MBA',
+  'B.SC',
+  'M.SC',
+  // Science & Pharmacy departments
+  'Microbiology',
+  'Chemistry',
+  'Food Science and Nutrition',
+  'B.Pharm',
+]
+
 // ── Problem-statement taxonomy (shared source of truth) ──────────────────────
 // A problem statement has a CATEGORY (Software / Hardware) and a THEME (subject area).
 export const PS_CATEGORIES = ['Software', 'Hardware']

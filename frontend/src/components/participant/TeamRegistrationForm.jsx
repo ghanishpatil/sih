@@ -4,26 +4,13 @@ import { Card } from '@/components/ui/Card.jsx'
 import { Button } from '@/components/ui/Button.jsx'
 import { Input } from '@/components/ui/Input.jsx'
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog.jsx'
+import { DEPARTMENTS } from '@/utils/constants.js'
 
 const YEAR_OPTIONS = ['1st Year', '2nd Year', '3rd Year', '4th Year']
 
 // Departments offered — a fixed dropdown keeps entries consistent across teams.
-const DEPARTMENT_OPTIONS = [
-  'Cyber Security',
-  'AIDS',
-  'AIML',
-  'CSE',
-  'Mechanical',
-  'MCA',
-  'BCA',
-  'Integrated B.Tech',
-  'Integrated M.Tech',
-  'BBA',
-  'BCOM',
-  'MBA',
-  'B.SC',
-  'M.SC',
-]
+// Shared with the admin jury-panel builder via constants.js.
+const DEPARTMENT_OPTIONS = DEPARTMENTS
 
 // Shared field styling so the <select> controls line up pixel-for-pixel with <Input>.
 const FIELD_LABEL_CLASS = 'mb-1.5 block text-sm font-medium text-ink-700'
