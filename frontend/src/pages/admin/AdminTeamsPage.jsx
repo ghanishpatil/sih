@@ -44,6 +44,7 @@ export function AdminTeamsPage() {
   const [bulkBusy, setBulkBusy] = useState(false)
   const [qualExportBusy, setQualExportBusy] = useState(false)
   const [fullExportBusy, setFullExportBusy] = useState(false)
+  const [teamsExportBusy, setTeamsExportBusy] = useState(false)
   const [usersMap, setUsersMap] = useState(new Map())
   const globalFilter = useAdminFiltersStore((s) => s.teamsGlobalFilter)
   const setGlobalFilter = useAdminFiltersStore((s) => s.setTeamsGlobalFilter)
@@ -201,26 +202,49 @@ export function AdminTeamsPage() {
 
   const [emailModal, setEmailModal] = useState(null)
 
-  const exportTeamsCsv = useCallback(() => {
-    downloadCsv(
-      `teams-export-${Date.now()}.csv`,
-      teams,
-      [
-        { header: 'Team ID', accessor: (r) => r.id },
-        { header: 'Team Name', accessor: (r) => r.name },
-        { header: 'Invite Code', accessor: (r) => r.inviteCode },
-        { header: 'Event ID', accessor: (r) => r.eventId },
-        { header: 'Leader ID', accessor: (r) => r.leaderId },
-        { header: 'Members', accessor: (r) => (typeof r.teamSize === 'number' && r.teamSize > 0) ? r.teamSize : (r.memberIds || []).length },
-        { header: 'Registration', accessor: (r) => deriveRegistrationStatus(r) },
-        { header: 'Event Registered', accessor: (r) => r.eventRegistered ? 'Yes' : 'No' },
-        { header: 'Payment Status', accessor: (r) => r.paymentStatus || '' },
-        { header: 'Problem Statement', accessor: (r) => r.problemStatementId || '' },
-        { header: 'Submission Locked', accessor: (r) => r.submissionLocked ? 'Yes' : 'No' },
-        { header: 'Shortlisted', accessor: (r) => r.shortlisted ? 'Yes' : 'No' },
-      ],
-    )
-  }, [teams])
+  // One row per team, with the LEADER's name + department and every member's
+  // name + department. Member names/depts live on memberRegistrations (not the
+  // team doc), so this pulls the roster from the backend and groups it per team.
+  const exportTeamsCsv = useCallback(async () => {
+    setTeamsExportBusy(true)
+    try {
+      const res = await api.exportTeamMembers()
+      const flat = Array.isArray(res?.rows) ? res.rows : []
+      // Group the flat per-member rows into one record per team.
+      const byTeam = new Map()
+      for (const r of flat) {
+        let g = byTeam.get(r.teamId)
+        if (!g) { g = { ctx: r, leader: null, members: [] }; byTeam.set(r.teamId, g) }
+        if (r.memberRole === 'Leader') g.leader = r
+        else if (r.memberRole === 'Member') g.members.push(r)
+      }
+      const teamRows = [...byTeam.values()].sort(
+        (a, b) => (a.ctx.teamName || '').localeCompare(b.ctx.teamName || ''),
+      )
+      if (teamRows.length === 0) {
+        globalThis.alert('No teams to export yet.')
+        return
+      }
+      downloadCsv(`teams-export-${Date.now()}.csv`, teamRows, [
+        { header: 'Team ID', accessor: (g) => g.ctx.teamId || '' },
+        { header: 'Team Name', accessor: (g) => g.ctx.teamName || '' },
+        { header: 'Invite Code', accessor: (g) => g.ctx.inviteCode || '' },
+        { header: 'Event ID', accessor: (g) => g.ctx.eventId || '' },
+        { header: 'Leader Name', accessor: (g) => g.leader?.memberName || g.ctx.teamLeaderName || '' },
+        { header: 'Leader Department', accessor: (g) => g.leader?.memberDepartment || g.ctx.teamDepartment || '' },
+        { header: 'Members', accessor: (g) => g.ctx.teamSize ?? (g.members.length + (g.leader ? 1 : 0)) },
+        { header: 'Member Names', accessor: (g) => g.members.map((m) => m.memberName).filter(Boolean).join('; ') },
+        { header: 'Member Departments', accessor: (g) => g.members.map((m) => m.memberDepartment).filter(Boolean).join('; ') },
+        { header: 'Problem Statement', accessor: (g) => g.ctx.problemStatementTitle || g.ctx.problemStatementId || '' },
+        { header: 'Submission Locked', accessor: (g) => g.ctx.submissionLocked || '' },
+        { header: 'Shortlisted', accessor: (g) => g.ctx.shortlisted || '' },
+      ])
+    } catch (e) {
+      globalThis.alert(e?.message || 'Could not export teams')
+    } finally {
+      setTeamsExportBusy(false)
+    }
+  }, [api])
 
   // Export ONLY qualified teams, with just the TEAM LEADER's details:
   // team name, leader name, mobile, email, college, PRN, year, etc.
@@ -372,8 +396,8 @@ export function AdminTeamsPage() {
           >
             {fullExportBusy ? 'Preparing…' : 'Download all member data'}
           </Button>
-          <Button variant="secondary" type="button" onClick={exportTeamsCsv}>
-            Export teams CSV
+          <Button variant="secondary" type="button" disabled={teamsExportBusy} onClick={exportTeamsCsv}>
+            {teamsExportBusy ? 'Preparing…' : 'Export teams CSV'}
           </Button>
           <Button
             variant="secondary"
