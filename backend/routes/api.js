@@ -3645,6 +3645,162 @@ export function adminRouter() {
     }
   })
 
+  /**
+   * Full team roster export — one row per registered member, with the member's
+   * personal details (name, email, phone, PRN, year, department, college) plus
+   * the team context (name, invite code, resolved leader name, problem
+   * statement, registration / payment / jury status).
+   *
+   * Reads `memberRegistrations` (the source of member detail — most members have
+   * no user account) in a single batch and joins to `teams` in memory, so the
+   * whole college roster comes back in ~3 reads instead of one request per team.
+   * Event-scoped by joining through teams (memberRegistrations has no eventId);
+   * supports ?all=1 / ?eventId=. Read-only, admin/observer gated by the router.
+   */
+  router.get('/export/team-members', async (req, res, next) => {
+    try {
+      const rawAll = req.query.all === '1'
+      const eventId = rawAll ? '' : typeof req.query.eventId === 'string' ? req.query.eventId.trim() : req.eventId
+
+      // Teams in scope (also the source of team-level context fields).
+      let teamsQ = db().collection('teams').limit(5000)
+      if (eventId) teamsQ = teamsQ.where('eventId', '==', eventId)
+      const [teamsSnap, regSnap, psSnap] = await Promise.all([
+        teamsQ.get(),
+        db().collection('memberRegistrations').limit(20000).get(),
+        db().collection('problemStatements').limit(5000).get(),
+      ])
+
+      const teamById = new Map(teamsSnap.docs.map((d) => [d.id, { id: d.id, ...d.data() }]))
+      const psTitleById = new Map(psSnap.docs.map((d) => [d.id, (d.data() || {}).title || '']))
+
+      // Group registrations by team so the leader can be resolved per team.
+      const regsByTeam = new Map()
+      let skippedOutOfScope = 0
+      for (const doc of regSnap.docs) {
+        const m = { id: doc.id, ...doc.data() }
+        const teamId = m.teamId || ''
+        if (eventId && !teamById.has(teamId)) { skippedOutOfScope += 1; continue }
+        if (!regsByTeam.has(teamId)) regsByTeam.set(teamId, [])
+        regsByTeam.get(teamId).push(m)
+      }
+
+      const resolveLeader = (members) => {
+        const sorted = members.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        return sorted.find((x) => x.isLeader) || sorted[0] || null
+      }
+
+      const teamContext = (team, leader) => ({
+        teamId: team?.id || '',
+        teamName: team?.name || '',
+        inviteCode: team?.inviteCode || '',
+        teamLeaderName: leader?.name || '',
+        teamDepartment: team?.department || leader?.department || '',
+        problemStatementId: team?.problemStatementId || '',
+        problemStatementTitle: team?.problemStatementId
+          ? (psTitleById.get(team.problemStatementId) || '')
+          : '',
+        registrationStatus: team?.registrationStatus || '',
+        eventRegistered: team?.eventRegistered ? 'Yes' : 'No',
+        paymentStatus: team?.paymentStatus || '',
+        juryStatus: team?.juryStatus || '',
+        submissionLocked: team?.submissionLocked ? 'Yes' : 'No',
+        shortlisted: team?.shortlisted ? 'Yes' : 'No',
+        teamSize: typeof team?.teamSize === 'number' && team.teamSize > 0
+          ? team.teamSize
+          : (team?.memberIds || []).length,
+      })
+
+      const rows = []
+      let memberCount = 0
+
+      // Iterate teams (so teams with no members registered still appear once) and
+      // then any registrations whose team is missing from the teams collection.
+      for (const team of teamById.values()) {
+        const members = regsByTeam.get(team.id) || []
+        if (members.length === 0) {
+          rows.push({
+            ...teamContext(team, null),
+            memberRole: 'No members registered',
+            memberName: '', email: '', phone: '', prn: '',
+            yearOfStudy: '', memberDepartment: '', college: '',
+            memberStatus: '', order: '',
+          })
+          continue
+        }
+        const leader = resolveLeader(members)
+        const sorted = members.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        for (const m of sorted) {
+          memberCount += 1
+          rows.push({
+            ...teamContext(team, leader),
+            memberRole: m === leader ? 'Leader' : 'Member',
+            memberName: m.name || '',
+            email: m.email || '',
+            phone: m.phone || '',
+            prn: m.prn || '',
+            yearOfStudy: m.yearOfStudy || '',
+            memberDepartment: m.department || '',
+            college: m.institute || '',
+            memberStatus: m.status || '',
+            order: typeof m.order === 'number' ? m.order : '',
+          })
+        }
+      }
+
+      // Orphan registrations (team deleted but member docs remain) — only when
+      // exporting all events; scoped exports already excluded them above.
+      if (!eventId) {
+        for (const [teamId, members] of regsByTeam.entries()) {
+          if (teamById.has(teamId)) continue
+          const leader = resolveLeader(members)
+          const sorted = members.slice().sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+          for (const m of sorted) {
+            memberCount += 1
+            rows.push({
+              teamId,
+              teamName: m.teamName || '(team deleted)',
+              inviteCode: '',
+              teamLeaderName: leader?.name || '',
+              teamDepartment: leader?.department || '',
+              problemStatementId: '', problemStatementTitle: '',
+              registrationStatus: '', eventRegistered: 'No', paymentStatus: '',
+              juryStatus: '', submissionLocked: 'No', shortlisted: 'No',
+              teamSize: members.length,
+              memberRole: m === leader ? 'Leader' : 'Member',
+              memberName: m.name || '',
+              email: m.email || '',
+              phone: m.phone || '',
+              prn: m.prn || '',
+              yearOfStudy: m.yearOfStudy || '',
+              memberDepartment: m.department || '',
+              college: m.institute || '',
+              memberStatus: m.status || '',
+              order: typeof m.order === 'number' ? m.order : '',
+            })
+          }
+        }
+      }
+
+      // Group each team's members together; leader first (order asc) within a team.
+      rows.sort((a, b) =>
+        (a.teamName || '').localeCompare(b.teamName || '') ||
+        (a.teamId || '').localeCompare(b.teamId || '') ||
+        (a.order === '' ? 999 : a.order) - (b.order === '' ? 999 : b.order),
+      )
+
+      res.json({
+        eventId: eventId || null,
+        rows,
+        teamCount: teamById.size,
+        memberCount,
+        skippedOutOfScope,
+      })
+    } catch (e) {
+      next(e)
+    }
+  })
+
   /** Export submissions data */
   router.get('/export/submissions', async (req, res, next) => {
     try {

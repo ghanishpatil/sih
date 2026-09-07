@@ -240,6 +240,8 @@ export function createApi(getToken, getEventId = () => '') {
     bulkOperation: (body) =>
       authReq('/api/admin/bulk-operation', { method: 'POST', body }),
     exportTeams: () => authReq('/api/admin/export/teams'),
+    // Full roster: one row per member with personal + team-context fields.
+    exportTeamMembers: () => authReq('/api/admin/export/team-members'),
     // Report: participants grouped by department (leaders vs members vs total).
     getParticipantsByDepartment: () => authReq('/api/admin/reports/participants-by-department'),
     exportSubmissions: () => authReq('/api/admin/export/submissions'),

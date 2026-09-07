@@ -43,6 +43,7 @@ export function AdminTeamsPage() {
   const [confirm, setConfirm] = useState(null)
   const [bulkBusy, setBulkBusy] = useState(false)
   const [qualExportBusy, setQualExportBusy] = useState(false)
+  const [fullExportBusy, setFullExportBusy] = useState(false)
   const [usersMap, setUsersMap] = useState(new Map())
   const globalFilter = useAdminFiltersStore((s) => s.teamsGlobalFilter)
   const setGlobalFilter = useAdminFiltersStore((s) => s.setTeamsGlobalFilter)
@@ -269,6 +270,48 @@ export function AdminTeamsPage() {
     }
   }, [teams, api])
 
+  // Full roster export — EVERY member of EVERY team with all their details
+  // (name, email, phone, PRN, year, department, college) plus team context.
+  // One batched backend call builds the whole dataset; the client writes the CSV.
+  const exportAllMemberData = useCallback(async () => {
+    setFullExportBusy(true)
+    try {
+      const res = await api.exportTeamMembers()
+      const rows = Array.isArray(res?.rows) ? res.rows : []
+      if (rows.length === 0) {
+        globalThis.alert('No member data to export yet.')
+        return
+      }
+      downloadCsv(`team-members-full-${Date.now()}.csv`, rows, [
+        { header: 'Team Name', accessor: (r) => r.teamName || '' },
+        { header: 'Invite Code', accessor: (r) => r.inviteCode || '' },
+        { header: 'Team Leader', accessor: (r) => r.teamLeaderName || '' },
+        { header: 'Team Department', accessor: (r) => r.teamDepartment || '' },
+        { header: 'Problem Statement', accessor: (r) => r.problemStatementTitle || r.problemStatementId || '' },
+        { header: 'Registration', accessor: (r) => r.registrationStatus || '' },
+        { header: 'Event Registered', accessor: (r) => r.eventRegistered || '' },
+        { header: 'Payment', accessor: (r) => r.paymentStatus || '' },
+        { header: 'Jury Status', accessor: (r) => r.juryStatus || '' },
+        { header: 'Submission Locked', accessor: (r) => r.submissionLocked || '' },
+        { header: 'Shortlisted', accessor: (r) => r.shortlisted || '' },
+        { header: 'Team Size', accessor: (r) => r.teamSize ?? '' },
+        { header: 'Role', accessor: (r) => r.memberRole || '' },
+        { header: 'Member Name', accessor: (r) => r.memberName || '' },
+        { header: 'Email', accessor: (r) => r.email || '' },
+        { header: 'Phone', accessor: (r) => r.phone || '' },
+        { header: 'PRN', accessor: (r) => r.prn || '' },
+        { header: 'Year of Study', accessor: (r) => r.yearOfStudy || '' },
+        { header: 'Member Department', accessor: (r) => r.memberDepartment || '' },
+        { header: 'College', accessor: (r) => r.college || '' },
+        { header: 'Member Status', accessor: (r) => r.memberStatus || '' },
+      ])
+    } catch (e) {
+      globalThis.alert(e?.message || 'Could not export member data')
+    } finally {
+      setFullExportBusy(false)
+    }
+  }, [api])
+
   const qualifiedCount = useMemo(() => teams.filter((t) => t.juryStatus === 'qualified').length, [teams])
 
   const columns = useMemo(
@@ -321,8 +364,16 @@ export function AdminTeamsPage() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            disabled={fullExportBusy}
+            onClick={exportAllMemberData}
+            title="Download every team's full roster — each member's name, email, phone, PRN, year, department and college, with team context"
+          >
+            {fullExportBusy ? 'Preparing…' : 'Download all member data'}
+          </Button>
           <Button variant="secondary" type="button" onClick={exportTeamsCsv}>
-            Export CSV
+            Export teams CSV
           </Button>
           <Button
             variant="secondary"
