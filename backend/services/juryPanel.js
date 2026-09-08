@@ -55,9 +55,39 @@ function clampLimit(n) {
   return Math.min(MAX_PANEL_SIZE, Math.max(1, Math.floor(v)))
 }
 
+function dedupeJudges(list, limit) {
+  return Array.isArray(list)
+    ? [...new Set(list.map((v) => String(v || '').trim()).filter(Boolean))].slice(0, limit)
+    : []
+}
+
+/**
+ * Normalize a department's ROOM list. Each room subdivides the department: only
+ * that room's judges see and score the teams assigned to it. Rooms are keyed by
+ * a non-empty room id/number; duplicates are dropped (first wins) and each
+ * room's judges are de-duped and truncated to its own limit.
+ */
+function normalizeRoomList(rawRooms) {
+  if (!Array.isArray(rawRooms)) return []
+  const seen = new Set()
+  const out = []
+  for (const r of rawRooms) {
+    const room = String(r?.room || '').trim()
+    if (!room || seen.has(room)) continue
+    seen.add(room)
+    const limit = clampLimit(r?.limit)
+    out.push({ room, limit, judges: dedupeJudges(r?.judges, limit) })
+  }
+  return out
+}
+
 /**
  * Normalize the `judgePanels` map read off the event doc. Unknown departments
  * are dropped; judge lists are de-duped and truncated to the panel limit.
+ *
+ * Each department entry carries BOTH the legacy department-wide panel
+ * (`limit` + `judges`, still honoured when no rooms exist) and a `rooms` array
+ * for room-scoped panels.
  */
 export function normalizePanels(raw) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
@@ -66,15 +96,16 @@ export function normalizePanels(raw) {
     const dept = String(deptRaw || '').trim()
     if (!isValidJuryDepartment(dept)) continue
     const limit = clampLimit(val?.limit)
-    const judges = Array.isArray(val?.judges)
-      ? [...new Set(val.judges.map((v) => String(v || '').trim()).filter(Boolean))].slice(0, limit)
-      : []
-    out[dept] = { limit, judges }
+    out[dept] = {
+      limit,
+      judges: dedupeJudges(val?.judges, limit),
+      rooms: normalizeRoomList(val?.rooms),
+    }
   }
   return out
 }
 
-/** Panel for one department, or null when none is configured. */
+/** Panel for one department (legacy, room-less), or null when none is configured. */
 export function getPanel(merged, department) {
   const dept = String(department || '').trim()
   if (!dept) return null
@@ -82,11 +113,47 @@ export function getPanel(merged, department) {
   return panels[dept] || null
 }
 
-/** Every judge uid that appears on any panel. */
+/**
+ * Resolve the panel that governs a specific TEAM's final score, honouring rooms.
+ *
+ * - If the team's department has ROOMS configured, the team must be assigned to
+ *   one (`team.juryRoom`) and only that room's judges apply. A team with no room
+ *   (or a room that no longer exists) has NO panel — so admin must assign it.
+ * - If the department has no rooms, the legacy department-wide panel applies.
+ *
+ * Returns `{ limit, judges, room }` or null.
+ */
+export function getTeamPanel(merged, team) {
+  const dept = String(team?.department || '').trim()
+  if (!dept) return null
+  const entry = normalizePanels(merged?.judgePanels)[dept]
+  if (!entry) return null
+  const rooms = Array.isArray(entry.rooms) ? entry.rooms : []
+  const room = String(team?.juryRoom || '').trim()
+  if (rooms.length > 0) {
+    if (!room) return null
+    const match = rooms.find((r) => r.room === room)
+    return match ? { limit: match.limit, judges: match.judges, room: match.room } : null
+  }
+  if (Array.isArray(entry.judges) && entry.judges.length > 0) {
+    return { limit: entry.limit, judges: entry.judges, room: '' }
+  }
+  return null
+}
+
+/** Union of every judge uid on a department entry — its legacy panel + all rooms. */
+export function deptJudgeUnion(entry) {
+  const set = new Set()
+  if (Array.isArray(entry?.judges)) for (const u of entry.judges) if (u) set.add(u)
+  if (Array.isArray(entry?.rooms)) for (const r of entry.rooms) for (const u of r.judges || []) if (u) set.add(u)
+  return set
+}
+
+/** Every judge uid that appears on any panel (department-wide or room). */
 export function allPanelJudgeUids(merged) {
   const panels = normalizePanels(merged?.judgePanels)
   const set = new Set()
-  for (const p of Object.values(panels)) for (const uid of p.judges) set.add(uid)
+  for (const p of Object.values(panels)) for (const uid of deptJudgeUnion(p)) set.add(uid)
   return [...set]
 }
 

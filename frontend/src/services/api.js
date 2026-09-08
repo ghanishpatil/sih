@@ -155,7 +155,11 @@ export function createApi(getToken, getEventId = () => '') {
     // limit. Every panel judge scores each team in that department, and the
     // team's final score is the average once ALL of them submit.
     getJudgePanels: () => authReq('/api/admin/judges/panels'),
+    // Body now carries an optional `room` — rooms subdivide a department panel so
+    // only that room's judges see/score its teams.
     setJudgePanel: (body) => authReq('/api/admin/judges/panels', { method: 'PUT', body }),
+    // Assign (or clear, with room:'') a team's jury room.
+    assignTeamRoom: (body) => authReq('/api/admin/teams/assign-room', { method: 'POST', body }),
     // Official per-team final score (average of the panel's judges).
     getTeamFinalScores: () => authReq('/api/admin/team-final-scores'),
     recordTeamPayment: (body) =>

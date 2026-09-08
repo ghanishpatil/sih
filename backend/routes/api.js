@@ -28,7 +28,8 @@ import {
   DEFAULT_PANEL_LIMIT,
   isValidJuryDepartment,
   normalizePanels,
-  getPanel,
+  getTeamPanel,
+  deptJudgeUnion,
   computeTeamFinalScore,
   findOffPanelJudges,
   judgePanelView,
@@ -1629,6 +1630,40 @@ export function adminRouter() {
   })
 
   /**
+   * Assign (or clear) a team's jury ROOM. Rooms subdivide a department's panel:
+   * only the judges on that room's panel see and score the team. Passing an empty
+   * room clears the assignment. Body: { teamId, room }.
+   */
+  router.post('/teams/assign-room', async (req, res, next) => {
+    try {
+      const body = req.body || {}
+      const teamId = String(body.teamId || '').trim()
+      if (!isValidDocId(teamId)) return res.status(400).json({ error: 'Valid teamId required.' })
+      const room = String(body.room ?? '').trim().slice(0, 30)
+      if (room && !/^[A-Za-z0-9 _\-/]+$/.test(room)) {
+        return res.status(400).json({ error: 'Room may use letters, digits, spaces, - _ / only.' })
+      }
+      const ref = db().doc(`teams/${teamId}`)
+      const snap = await ref.get()
+      if (!snap.exists) return res.status(404).json({ error: 'Team not found.' })
+      await ref.set(
+        { juryRoom: room || FieldValue.delete(), updatedAt: FieldValue.serverTimestamp() },
+        { merge: true },
+      )
+      await appendAuditLog({
+        actorUid: req.user.uid,
+        action: 'jury.room_assign',
+        targetType: 'team',
+        targetId: teamId,
+        metadata: { room: room || null },
+      })
+      res.json({ ok: true, teamId, room })
+    } catch (e) {
+      next(e)
+    }
+  })
+
+  /**
    * Admin listing of problem statements — includes drafts AND private
    * participant-authored Open Innovation entries (which the public endpoint
    * deliberately filters out).
@@ -3211,6 +3246,14 @@ export function adminRouter() {
         return res.status(400).json({ error: `Invalid department. Must be one of: ${JURY_DEPARTMENTS.join(', ')}` })
       }
 
+      // Optional ROOM. When provided this saves a room-scoped panel inside the
+      // department (only that room's judges see/score its teams); when omitted it
+      // writes the legacy department-wide panel.
+      const room = String(body.room ?? '').trim().slice(0, 30)
+      if (room && !/^[A-Za-z0-9 _\-/]+$/.test(room)) {
+        return res.status(400).json({ error: 'Room may use letters, digits, spaces, - _ / only.' })
+      }
+
       const rawLimit = Number(body.limit)
       if (!Number.isFinite(rawLimit) || rawLimit < 1 || rawLimit > MAX_PANEL_SIZE) {
         return res.status(400).json({ error: `limit must be between 1 and ${MAX_PANEL_SIZE}.` })
@@ -3242,18 +3285,35 @@ export function adminRouter() {
       if (!eventId) return res.status(503).json({ error: 'Hackathon is starting up. Try again in a moment.' })
       const eventRef = db().doc(`events/${eventId}`)
 
-      let previousJudges = []
+      let beforeUnion = new Set()
+      let afterUnion = new Set()
       await db().runTransaction(async (tx) => {
         const snap = await tx.get(eventRef)
         const current = normalizePanels(snap.data()?.judgePanels)
-        previousJudges = current[department]?.judges || []
-        const next = { ...current, [department]: { limit, judges: judgeIds } }
+        const before = current[department] || { limit: DEFAULT_PANEL_LIMIT, judges: [], rooms: [] }
+        beforeUnion = deptJudgeUnion(before)
+
+        let nextEntry
+        if (room) {
+          // Upsert this room; an empty judge list removes it.
+          const rooms = (Array.isArray(before.rooms) ? before.rooms : []).filter((r) => r.room !== room)
+          if (judgeIds.length > 0) rooms.push({ room, limit, judges: judgeIds })
+          nextEntry = { limit: before.limit, judges: before.judges || [], rooms }
+        } else {
+          // Legacy department-wide panel (rooms untouched).
+          nextEntry = { limit, judges: judgeIds, rooms: Array.isArray(before.rooms) ? before.rooms : [] }
+        }
+        afterUnion = deptJudgeUnion(nextEntry)
+
+        const next = { ...current, [department]: nextEntry }
         tx.set(eventRef, { judgePanels: next, updatedAt: FieldValue.serverTimestamp() }, { merge: true })
       })
 
-      // Mirror to users.assignedDepartments so department scoping keeps working.
-      const added = judgeIds.filter((id) => !previousJudges.includes(id))
-      const removed = previousJudges.filter((id) => !judgeIds.includes(id))
+      // Mirror to users.assignedDepartments so the department appears on each
+      // judge's profile. Diff the department's FULL judge union (legacy + every
+      // room) so a judge who still sits on another room keeps the department.
+      const added = [...afterUnion].filter((id) => !beforeUnion.has(id))
+      const removed = [...beforeUnion].filter((id) => !afterUnion.has(id))
       if (added.length || removed.length) {
         const batch = db().batch()
         for (const id of added) {
@@ -3280,10 +3340,10 @@ export function adminRouter() {
         targetType: 'event',
         targetId: eventId,
         eventId,
-        metadata: { department, limit, judges: judgeIds, added: added.length, removed: removed.length },
+        metadata: { department, room: room || null, limit, judges: judgeIds, added: added.length, removed: removed.length },
       })
 
-      res.json({ ok: true, department, limit, judges: judgeIds })
+      res.json({ ok: true, department, room: room || '', limit, judges: judgeIds })
     } catch (e) {
       next(e)
     }
@@ -3302,7 +3362,6 @@ export function adminRouter() {
       const activeEvent = await getActiveEvent()
       const eventId = String(req.query.eventId || req.eventId || activeEvent?.id || '').trim()
       const merged = await getActiveEventConfig()
-      const panels = normalizePanels(merged?.judgePanels)
 
       let teamQuery = db().collection('teams').limit(2000)
       if (eventId) teamQuery = teamQuery.where('eventId', '==', eventId)
@@ -3330,7 +3389,10 @@ export function adminRouter() {
       const rows = teamSnap.docs.map((d) => {
         const t = d.data()
         const department = String(t.department || '').trim()
-        const panel = department ? panels[department] || null : null
+        const room = String(t.juryRoom || '').trim()
+        // Room-aware: resolves the department panel, or the specific room's panel
+        // when the department uses rooms.
+        const panel = getTeamPanel(merged, { department, juryRoom: room })
         const teamEvals = byTeam.get(d.id) || {}
         const result = computeTeamFinalScore(panel, teamEvals, judgeNames)
         // Judges who scored this team but are NOT on its panel — their scores are
@@ -3340,6 +3402,7 @@ export function adminRouter() {
           teamId: d.id,
           teamName: t.name || d.id,
           department,
+          room,
           problemStatementId: t.problemStatementId || '',
           finalist: t.finalist === true,
           ...result,
@@ -5002,10 +5065,22 @@ export function judgesRouter() {
 
   // A judge assigned to a department may evaluate every team whose team-level
   // department (set from the team leader) matches one of their assigned departments.
-  const judgeDeptAllows = (profile, team) => {
-    const depts = Array.isArray(profile?.assignedDepartments) ? profile.assignedDepartments : []
+  // Room-aware department access. Once a department has ROOMS configured, a judge
+  // may only see the teams in the SAME room they sit on (room isolation) — and a
+  // team must be assigned to that room. Departments WITHOUT rooms fall back to
+  // department-wide access via the `assignedDepartments` mirror, so existing
+  // department / PS / domain assignments keep working unchanged.
+  const judgeDeptOrRoomAllows = (merged, profile, uid, team) => {
     const teamDept = String(team?.department || '').trim()
-    return Boolean(teamDept) && depts.includes(teamDept)
+    if (!teamDept) return false
+    const entry = normalizePanels(merged?.judgePanels)[teamDept]
+    const hasRooms = entry && Array.isArray(entry.rooms) && entry.rooms.length > 0
+    if (hasRooms) {
+      const panel = getTeamPanel(merged, team)
+      return Boolean(panel && panel.judges.includes(uid))
+    }
+    const depts = Array.isArray(profile?.assignedDepartments) ? profile.assignedDepartments : []
+    return depts.includes(teamDept)
   }
 
   const judgeTeamRow = (id, data, myEvaluation) => ({
@@ -5049,7 +5124,7 @@ export function judgesRouter() {
     const panelUids = new Set()
 
     for (const t of teams) {
-      const panel = getPanel(merged, t.department)
+      const panel = getTeamPanel(merged, t)
       panelByTeam.set(t.id, panel)
       for (const juid of panel?.judges || []) {
         panelUids.add(juid)
@@ -5265,9 +5340,9 @@ export function judgesRouter() {
           if (merged.finalistsOnly === true && t.finalist !== true) return false
           // Direct team assignment (team.judgeIds) — include regardless of PS.
           if (Array.isArray(t.judgeIds) && t.judgeIds.includes(uid)) return true
-          // Department assignment — include every team in the judge's department(s),
-          // even before they've picked a problem statement.
-          if (judgeDeptAllows(profile, t)) return true
+          // Department / room assignment — include the teams in the judge's
+          // department (or, when rooms are configured, only their room's teams).
+          if (judgeDeptOrRoomAllows(merged, profile, uid, t)) return true
           if (!t.problemStatementId) return false
           // Include if matched by direct PS assignment OR by domain+track assignment
           return judgeMayEvaluateTeam(profile, t) || domainTrackPsIds.has(t.problemStatementId)
@@ -5332,8 +5407,10 @@ export function judgesRouter() {
         return res.status(403).json({ error: 'Team is outside your active event edition.' })
       }
 
+      const merged = await getActiveEventConfig()
+
       const directTeamAssignedReview = Array.isArray(teamRaw.judgeIds) && teamRaw.judgeIds.includes(req.user.uid)
-      if (!directTeamAssignedReview && !judgeDeptAllows(req.profile, teamRaw) && !judgeMayEvaluateTeam(req.profile, teamRaw)) {
+      if (!directTeamAssignedReview && !judgeDeptOrRoomAllows(merged, req.profile, uid, teamRaw) && !judgeMayEvaluateTeam(req.profile, teamRaw)) {
         // Also check domain+track assignments
         const judgeAssignments = Array.isArray(req.profile?.judgeAssignments) ? req.profile.judgeAssignments : []
         const psId = teamRaw.problemStatementId || ''
@@ -5359,7 +5436,6 @@ export function judgesRouter() {
       }
 
       const evtId = teamRaw.eventId || req.eventId || null
-      const merged = await getActiveEventConfig()
       // Finals gate: when finalistsOnly is on, only hand-picked finalists are reviewable.
       if (merged.finalistsOnly === true && teamRaw.finalist !== true) {
         return res.status(403).json({ error: 'Finals judging is restricted to selected finalists.' })
@@ -5543,7 +5619,7 @@ export function judgesRouter() {
       }
 
       const directTeamAssignedEval = Array.isArray(team.judgeIds) && team.judgeIds.includes(jid)
-      if (!directTeamAssignedEval && !judgeDeptAllows(req.profile, team) && !judgeMayEvaluateTeam(req.profile, team)) {
+      if (!directTeamAssignedEval && !judgeDeptOrRoomAllows(merged, req.profile, jid, team) && !judgeMayEvaluateTeam(req.profile, team)) {
         // Also check domain+track assignments
         const judgeAssignments = Array.isArray(req.profile?.judgeAssignments) ? req.profile.judgeAssignments : []
         let allowedByDomainTrack = false

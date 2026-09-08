@@ -64,15 +64,27 @@ const DEPARTMENTS = APP_DEPARTMENTS
  * team's final score is the average once all of them submit.
  */
 function JuryPanelBuilder({
-  departments, panels, judges, teamCounts, teamsWithoutDepartment, maxPanelSize,
-  panelDept, setPanelDept, panelLimit, setPanelLimit, panelSlots, setPanelSlots,
-  saving, onSave,
+  departments, panels, judges, teams, teamCounts, teamsWithoutDepartment, maxPanelSize,
+  panelDept, onDeptChange, panelRoom, setPanelRoom, panelLimit, setPanelLimit,
+  panelSlots, setPanelSlots, saving, onSave, onEditRoom, onAssignTeamRoom,
 }) {
-  const configuredCount = Object.values(panels).filter((p) => (p?.judges?.length || 0) > 0).length
+  const roomCount = Object.values(panels).reduce((n, p) => n + (p?.rooms?.length || 0), 0)
   const judgeLabel = (uid) => {
     const j = judges.find((u) => u.id === uid)
     return j ? j.email || j.displayName || uid : uid
   }
+
+  // Rooms configured for the department currently being edited.
+  const deptRooms = (panelDept && Array.isArray(panels[panelDept]?.rooms)) ? panels[panelDept].rooms : []
+  // Teams in the selected department (for the room-assignment table).
+  const deptTeams = panelDept
+    ? teams
+        .filter((t) => String(t.department || '').trim() === panelDept)
+        .sort((a, b) => String(a.name || a.id).localeCompare(String(b.name || b.id)))
+    : []
+  // How many teams sit in each room of the selected department.
+  const roomTeamCount = (room) =>
+    deptTeams.filter((t) => String(t.juryRoom || '').trim() === room).length
 
   return (
     <Card>
@@ -80,16 +92,17 @@ function JuryPanelBuilder({
         <div>
           <h2 className="flex items-center gap-2 font-display text-lg font-semibold text-ink-900">
             <Users className="h-4 w-4 text-brand-500" />
-            Jury panels (by department)
+            Jury panels (by department &amp; room)
           </h2>
           <p className="mt-1 max-w-3xl text-sm text-ink-600">
-            Set how many judges sit on each department&apos;s panel and who they are. All panel judges
-            evaluate the <strong>same teams at the same time</strong>, independently — a team&apos;s final
-            score is the <strong>average of their scores</strong>, calculated only once every judge on
-            the panel has submitted.
+            Pick a department, enter a <strong>room</strong>, choose how many judges sit in it, then
+            assign Judge 1, Judge 2… Each room&apos;s judges see and score <strong>only the teams assigned
+            to that room</strong>, independently — a team&apos;s final score is the{' '}
+            <strong>average of its room&apos;s judges</strong>, calculated once all of them submit. Assign
+            teams to rooms in the table below.
           </p>
         </div>
-        <Badge tone={configuredCount > 0 ? 'success' : 'neutral'}>{configuredCount} panel(s) configured</Badge>
+        <Badge tone={roomCount > 0 ? 'success' : 'neutral'}>{roomCount} room panel(s) configured</Badge>
       </div>
 
       {teamsWithoutDepartment > 0 ? (
@@ -104,30 +117,42 @@ function JuryPanelBuilder({
       ) : null}
 
       {/* Editor */}
-      <div className="mt-5 grid gap-4 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface-muted))]/30 p-4 sm:grid-cols-2">
+      <div className="mt-5 grid gap-4 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface-muted))]/30 p-4 sm:grid-cols-3">
         <div>
           <label htmlFor="panel-dept" className="mb-1.5 block text-sm font-medium text-ink-700">Department</label>
           <select
             id="panel-dept"
             value={panelDept}
-            onChange={(e) => setPanelDept(e.target.value)}
+            onChange={(e) => onDeptChange(e.target.value)}
             className="h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
           >
             <option value="">Choose a department…</option>
             {departments.map((d) => {
               const count = teamCounts[d] || 0
-              const size = panels[d]?.judges?.length || 0
+              const size = panels[d]?.rooms?.length || 0
               return (
                 <option key={d} value={d}>
-                  {d} — {count} team(s){size > 0 ? ` · ${size} judge(s)` : ''}
+                  {d} — {count} team(s){size > 0 ? ` · ${size} room(s)` : ''}
                 </option>
               )
             })}
           </select>
         </div>
         <div>
+          <label htmlFor="panel-room" className="mb-1.5 block text-sm font-medium text-ink-700">Room no.</label>
+          <input
+            id="panel-room"
+            type="text"
+            value={panelRoom}
+            disabled={!panelDept}
+            onChange={(e) => setPanelRoom(e.target.value)}
+            placeholder="e.g. 401"
+            className="h-11 w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 text-sm text-ink-900 disabled:opacity-50 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+        </div>
+        <div>
           <label htmlFor="panel-limit" className="mb-1.5 block text-sm font-medium text-ink-700">
-            Judges on this panel (limit)
+            Judges in this room (limit)
           </label>
           <select
             id="panel-limit"
@@ -143,9 +168,9 @@ function JuryPanelBuilder({
         </div>
 
         {panelDept ? (
-          <div className="sm:col-span-2">
+          <div className="sm:col-span-3">
             <p className="mb-2 text-sm font-medium text-ink-700">
-              Panel members <span className="text-ink-400">(order is a label only)</span>
+              Room judges <span className="text-ink-400">(order is the Judge 1 / Judge 2 label)</span>
             </p>
             <div className="space-y-2">
               {panelSlots.map((uid, idx) => (
@@ -158,7 +183,7 @@ function JuryPanelBuilder({
                     onChange={(e) =>
                       setPanelSlots((prev) => prev.map((v, i) => (i === idx ? e.target.value : v)))
                     }
-                    aria-label={`Judge ${idx + 1} for ${panelDept}`}
+                    aria-label={`Judge ${idx + 1} for ${panelDept} room ${panelRoom || ''}`}
                     className="h-11 min-w-0 flex-1 rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-3 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
                   >
                     <option value="">— empty —</option>
@@ -170,59 +195,99 @@ function JuryPanelBuilder({
               ))}
             </div>
             <div className="mt-3 flex flex-wrap items-center gap-3">
-              <Button type="button" disabled={saving} onClick={() => void onSave()}>
-                {saving ? 'Saving…' : `Save ${panelDept} panel`}
+              <Button type="button" disabled={saving || !panelRoom.trim()} onClick={() => void onSave()}>
+                {saving ? 'Saving…' : panelRoom.trim() ? `Save room ${panelRoom.trim()}` : 'Enter a room no.'}
               </Button>
               <span className="text-xs text-ink-500">
-                Leave a slot empty to reduce the panel. Saving also updates each judge&apos;s department access.
+                Leave every slot empty and save to delete this room.
               </span>
             </div>
           </div>
         ) : (
-          <p className="text-sm text-ink-500 sm:col-span-2">
-            Pick a department above to build its panel.
+          <p className="text-sm text-ink-500 sm:col-span-3">
+            Pick a department above to build its rooms.
           </p>
         )}
       </div>
 
-      {/* Existing panels overview */}
-      <div className="mt-5">
-        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-500">All panels</p>
-        {configuredCount === 0 ? (
-          <p className="text-sm text-ink-500">No panels configured yet.</p>
-        ) : (
-          <div className="space-y-2">
-            {departments
-              .filter((d) => (panels[d]?.judges?.length || 0) > 0)
-              .map((d) => {
-                const p = panels[d]
-                return (
+      {/* Rooms of the selected department + team assignment */}
+      {panelDept ? (
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          {/* Existing rooms for this department */}
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+              Rooms in {panelDept}
+            </p>
+            {deptRooms.length === 0 ? (
+              <p className="text-sm text-ink-500">No rooms yet — add one above.</p>
+            ) : (
+              <div className="space-y-2">
+                {deptRooms.map((r) => (
                   <div
-                    key={d}
+                    key={r.room}
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[rgb(var(--border))] px-3 py-2.5"
                   >
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-ink-900">{d}</p>
+                      <p className="text-sm font-semibold text-ink-900">Room {r.room}</p>
                       <p className="text-xs text-ink-500">
-                        {teamCounts[d] || 0} team(s) · {p.judges.length} of {p.limit} slot(s) filled
+                        {roomTeamCount(r.room)} team(s) · {r.judges.length} of {r.limit} judge(s)
                       </p>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      {p.judges.map((uid, i) => (
+                      {r.judges.map((uid, i) => (
                         <Badge key={uid} tone="brand" className="text-[10px]">
                           J{i + 1}: {judgeLabel(uid)}
                         </Badge>
                       ))}
-                      <Button type="button" size="sm" variant="secondary" onClick={() => setPanelDept(d)}>
+                      <Button type="button" size="sm" variant="secondary" onClick={() => onEditRoom(panelDept, r.room)}>
                         Edit
                       </Button>
                     </div>
                   </div>
-                )
-              })}
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+
+          {/* Assign teams to rooms */}
+          <div>
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-500">
+              Assign {panelDept} teams to a room
+            </p>
+            {deptRooms.length === 0 ? (
+              <p className="text-sm text-ink-500">Add at least one room first.</p>
+            ) : deptTeams.length === 0 ? (
+              <p className="text-sm text-ink-500">No teams in this department yet.</p>
+            ) : (
+              <div className="max-h-80 space-y-1.5 overflow-y-auto rounded-xl border border-[rgb(var(--border))] p-2">
+                {deptTeams.map((t) => {
+                  const cur = String(t.juryRoom || '').trim()
+                  const known = deptRooms.some((r) => r.room === cur)
+                  return (
+                    <div key={t.id} className="flex items-center gap-2">
+                      <span className="min-w-0 flex-1 truncate text-sm text-ink-800" title={t.name || t.id}>
+                        {t.name || t.id}
+                      </span>
+                      <select
+                        value={cur}
+                        onChange={(e) => onAssignTeamRoom(t.id, e.target.value)}
+                        aria-label={`Room for ${t.name || t.id}`}
+                        className="h-9 w-32 shrink-0 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--surface))] px-2 text-xs text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+                      >
+                        <option value="">— unassigned —</option>
+                        {deptRooms.map((r) => (
+                          <option key={r.room} value={r.room}>Room {r.room}</option>
+                        ))}
+                        {cur && !known ? <option value={cur}>Room {cur} (removed)</option> : null}
+                      </select>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
     </Card>
   )
 }
@@ -370,6 +435,7 @@ export function AdminJuryPage() {
   const [teamsWithoutDepartment, setTeamsWithoutDepartment] = useState(0)
   const [maxPanelSize, setMaxPanelSize] = useState(5)
   const [panelDept, setPanelDept] = useState('')
+  const [panelRoom, setPanelRoom] = useState('') // room being edited within panelDept
   const [panelLimit, setPanelLimit] = useState(2)
   const [panelSlots, setPanelSlots] = useState([]) // ordered uids; index 0 = Judge 1
   const [panelSaving, setPanelSaving] = useState(false)
@@ -422,15 +488,40 @@ export function AdminJuryPage() {
   useEffect(() => { void refreshData() }, [refreshData])
   useEffect(() => { void refreshScores() }, [refreshScores])
 
-  // Load the selected department's existing panel into the editor.
-  useEffect(() => {
-    if (!panelDept) { setPanelSlots([]); setPanelLimit(2); return }
-    const p = panels[panelDept]
-    const limit = typeof p?.limit === 'number' && p.limit > 0 ? p.limit : 2
-    const judgesList = Array.isArray(p?.judges) ? p.judges : []
+  // Switching department resets the editor for a fresh room entry. Rooms are
+  // loaded explicitly via editRoom() so typing a new room number never clobbers
+  // the judge slots (there is deliberately NO auto-load effect on panelDept).
+  function onPanelDeptChange(dept) {
+    setPanelDept(dept)
+    setPanelRoom('')
+    setPanelLimit(2)
+    setPanelSlots([])
+    setMsg('')
+  }
+
+  // Load an existing room's judges into the editor for editing.
+  function editRoom(dept, room) {
+    const r = (panels[dept]?.rooms || []).find((x) => x.room === room)
+    const limit = typeof r?.limit === 'number' && r.limit > 0 ? r.limit : 2
+    const judgesList = Array.isArray(r?.judges) ? r.judges : []
+    setPanelDept(dept)
+    setPanelRoom(room)
     setPanelLimit(limit)
     setPanelSlots(Array.from({ length: limit }, (_, i) => judgesList[i] || ''))
-  }, [panelDept, panels])
+    setMsg('')
+  }
+
+  // Assign (or clear) a team's room, then refresh panels + scores.
+  async function assignTeamRoom(teamId, room) {
+    setMsg('')
+    try {
+      await api.assignTeamRoom({ teamId, room })
+      await refreshData()
+      await refreshScores()
+    } catch (e) {
+      setMsg(e.message || 'Could not assign the room')
+    }
+  }
 
   // Keep the number of judge slots in sync with the limit.
   useEffect(() => {
@@ -442,24 +533,29 @@ export function AdminJuryPage() {
 
   async function savePanel() {
     if (!panelDept) { setMsg('Pick a department first.'); return }
+    const room = panelRoom.trim()
+    if (!room) { setMsg('Enter a room number/name.'); return }
     const chosen = panelSlots.map((s) => String(s || '').trim()).filter(Boolean)
     if (new Set(chosen).size !== chosen.length) {
-      setMsg('The same judge cannot occupy two slots on one panel.')
+      setMsg('The same judge cannot occupy two slots in one room.')
       return
     }
     setPanelSaving(true)
     setMsg('')
     try {
-      await api.setJudgePanel({ department: panelDept, limit: panelLimit, judges: chosen })
+      await api.setJudgePanel({ department: panelDept, room, limit: panelLimit, judges: chosen })
       setMsg(
         chosen.length === 0
-          ? `Panel cleared for ${panelDept}.`
-          : `Panel saved for ${panelDept} — ${chosen.length} of ${panelLimit} judge(s) assigned.`,
+          ? `Room ${room} cleared for ${panelDept}.`
+          : `Room ${room} saved for ${panelDept} — ${chosen.length} of ${panelLimit} judge(s) assigned.`,
       )
+      setPanelRoom('')
+      setPanelLimit(2)
+      setPanelSlots([])
       await refreshData()
       await refreshScores()
     } catch (e) {
-      setMsg(e.message || 'Could not save the panel')
+      setMsg(e.message || 'Could not save the room panel')
     } finally {
       setPanelSaving(false)
     }
@@ -727,7 +823,7 @@ export function AdminJuryPage() {
     else if (statusFilter === 'nopanel') list = list.filter((r) => r.expectedCount === 0)
     if (q) {
       list = list.filter((r) =>
-        `${r.teamName || ''} ${r.department || ''} ${r.teamId}`.toLowerCase().includes(q),
+        `${r.teamName || ''} ${r.department || ''} ${r.room || ''} ${r.teamId}`.toLowerCase().includes(q),
       )
     }
     return [...list].sort((a, b) => String(a.teamName || a.teamId).localeCompare(String(b.teamName || b.teamId)))
@@ -786,17 +882,22 @@ export function AdminJuryPage() {
         departments={DEPARTMENTS}
         panels={panels}
         judges={judges}
+        teams={teams}
         teamCounts={panelTeamCounts}
         teamsWithoutDepartment={teamsWithoutDepartment}
         maxPanelSize={maxPanelSize}
         panelDept={panelDept}
-        setPanelDept={setPanelDept}
+        onDeptChange={onPanelDeptChange}
+        panelRoom={panelRoom}
+        setPanelRoom={setPanelRoom}
         panelLimit={panelLimit}
         setPanelLimit={setPanelLimit}
         panelSlots={panelSlots}
         setPanelSlots={setPanelSlots}
         saving={panelSaving}
         onSave={savePanel}
+        onEditRoom={editRoom}
+        onAssignTeamRoom={assignTeamRoom}
       />
 
       {/* Team final scores (average of the panel's judges) */}
@@ -889,6 +990,7 @@ export function AdminJuryPage() {
                         {t.department
                           ? <span>{t.department}</span>
                           : <span className="text-amber-700">No department set</span>}
+                        {t.room ? <span> · Room {t.room}</span> : null}
                         {t.problemStatementId ? <span> · PS <span className="font-mono">{t.problemStatementId}</span></span> : ''}
                         {t.expectedCount > 0
                           ? <span> · {t.submittedCount}/{t.expectedCount} judges submitted</span>
@@ -938,7 +1040,7 @@ export function AdminJuryPage() {
                       {/* Per-judge breakdown for this team's panel */}
                       <div className="mb-3 rounded-lg border border-[rgb(var(--border))] bg-[rgb(var(--surface))] p-3">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-500">
-                          Panel {t.department ? `· ${t.department}` : ''}
+                          Panel {t.department ? `· ${t.department}` : ''}{t.room ? ` · Room ${t.room}` : ''}
                         </p>
                         {t.judges && t.judges.length > 0 ? (
                           <div className="mt-2 space-y-1.5">
