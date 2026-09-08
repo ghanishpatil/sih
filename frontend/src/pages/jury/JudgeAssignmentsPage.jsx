@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { ClipboardList, Layers } from 'lucide-react'
+import { ClipboardList, Layers, Search } from 'lucide-react'
 import { usePageSeo } from '@/hooks/usePageSeo.js'
 import { useJuryAssignments } from '@/hooks/useJuryAssignments.js'
 import { Card } from '@/components/ui/Card.jsx'
@@ -19,6 +19,7 @@ export function JudgeAssignmentsPage() {
   usePageSeo({ title: 'Assignments', description: 'Scoped problem statements & teams.' })
   const { teams, problems, loading, error } = useJuryAssignments()
   const [psFilter, setPsFilter] = useState('all')
+  const [teamQuery, setTeamQuery] = useState('')
 
   const teamsByPs = useMemo(() => {
     const m = new Map()
@@ -34,6 +35,24 @@ export function JudgeAssignmentsPage() {
     if (psFilter === 'all') return problems
     return problems.filter((p) => p.id === psFilter)
   }, [problems, psFilter])
+
+  // Problem sections with their teams, narrowed by the team-name search. When a
+  // query is active, problems with no matching team are hidden.
+  const sections = useMemo(() => {
+    const q = teamQuery.trim().toLowerCase()
+    return filteredProblems
+      .map((p) => {
+        let list = teamsByPs.get(p.id) || []
+        if (q) list = list.filter((t) => `${t.name || ''} ${t.id}`.toLowerCase().includes(q))
+        return { problem: p, list }
+      })
+      .filter((s) => (teamQuery.trim() ? s.list.length > 0 : true))
+  }, [filteredProblems, teamsByPs, teamQuery])
+
+  const matchCount = useMemo(
+    () => (teamQuery.trim() ? sections.reduce((n, s) => n + s.list.length, 0) : 0),
+    [sections, teamQuery],
+  )
 
   if (loading) {
     return (
@@ -77,10 +96,25 @@ export function JudgeAssignmentsPage() {
         ))}
       </div>
 
+      {problems.length > 0 ? (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-400" />
+          <input
+            value={teamQuery}
+            onChange={(e) => setTeamQuery(e.target.value)}
+            placeholder="Search teams by name…"
+            className="w-full rounded-xl border border-[rgb(var(--border))] bg-[rgb(var(--surface))] py-2.5 pl-9 pr-3 text-sm text-ink-900 focus:border-brand-500 focus:outline-none focus:ring-2 focus:ring-brand-500/20"
+          />
+          {teamQuery.trim() ? (
+            <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-ink-400">
+              {matchCount} match{matchCount === 1 ? '' : 'es'}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+
       <div className="space-y-8">
-        {filteredProblems.map((p) => {
-          const list = teamsByPs.get(p.id) || []
-          return (
+        {sections.map(({ problem: p, list }) => (
             <Card key={p.id}>
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0">
@@ -151,9 +185,16 @@ export function JudgeAssignmentsPage() {
                 )}
               </div>
             </Card>
-          )
-        })}
+        ))}
       </div>
+
+      {teamQuery.trim() && sections.length === 0 && problems.length > 0 ? (
+        <Card>
+          <p className="text-sm text-ink-600">
+            No teams match “{teamQuery.trim()}”. Clear the search to see all teams in your scope.
+          </p>
+        </Card>
+      ) : null}
 
       {problems.length === 0 && !error ? (
         <Card>
