@@ -251,7 +251,7 @@ function PanelStatus({ panel }) {
 // shown to the judge; the value is what gets persisted on the evaluation.
 const JUDGE_STATUS_OPTIONS = [
   { value: 'accepted', label: 'Accepted', active: 'border-emerald-500 bg-emerald-500/10 text-emerald-700' },
-  { value: 'thoroughly', label: 'Thoroughly', active: 'border-amber-500 bg-amber-500/10 text-amber-700' },
+  { value: 'thoroughly', label: 'Thoughtful', active: 'border-amber-500 bg-amber-500/10 text-amber-700' },
   { value: 'rejected', label: 'Rejected', active: 'border-red-500 bg-red-500/10 text-red-700' },
 ]
 
@@ -493,7 +493,7 @@ export function JudgeTeamReviewPage() {
     if (!teamId || !canEditAtAll) return
     setMsg('')
     if (!judgeStatus) {
-      setMsg('Select a status (Accepted / Thoroughly / Rejected) before submitting.')
+      setMsg('Select a status (Accepted / Thoughtful / Rejected) before submitting.')
       return
     }
     try {
@@ -511,7 +511,7 @@ export function JudgeTeamReviewPage() {
     if (!teamId || !canEditAtAll) return
     setMsg('')
     if (part === 'B' && !judgeStatus) {
-      setMsg('Select a status (Accepted / Thoroughly / Rejected) before submitting.')
+      setMsg('Select a status (Accepted / Thoughtful / Rejected) before submitting.')
       return
     }
     try {

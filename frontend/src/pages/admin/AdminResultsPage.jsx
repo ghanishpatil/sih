@@ -15,7 +15,7 @@ const STATUS_LABEL = { qualified: 'Qualified', waitlist: 'Waitlist', not_qualifi
 // Per-judge verdict recorded on each evaluation (separate from the admin's
 // team-level juryStatus above).
 const JUDGE_VERDICT_TONE = { accepted: 'success', thoroughly: 'warn', rejected: 'danger' }
-const JUDGE_VERDICT_LABEL = { accepted: 'Accepted', thoroughly: 'Thoroughly', rejected: 'Rejected' }
+const JUDGE_VERDICT_LABEL = { accepted: 'Accepted', thoroughly: 'Thoughtful', rejected: 'Rejected' }
 
 /** Per-criterion breakdown for one rubric part: items [{label, score, max}], total, maxTotal, pct. */
 function partBreakdown(criteria, scores) {
